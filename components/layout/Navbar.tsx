@@ -56,4 +56,24 @@ export default function Navbar() {
       {/* 사이드 네비게이션 (PC) */}
       <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 pt-16 z-30">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(h
+          const active = pathname === href || pathname.startsWith(href + '/')
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                'flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors',
+                active
+                  ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600'
+                  : 'text-gray-600 hover:bg-gray-50'
+              )}
+            >
+              <Icon size={20} />
+              {label}
+            </Link>
+          )
+        })}
+      </aside>
+    </>
+  )
+}
