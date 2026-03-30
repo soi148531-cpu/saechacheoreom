@@ -1,0 +1,433 @@
+'use client'
+
+import { useEffect, useState, useMemo } from 'react'
+import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa } from 'lucide-react'
+import { createClient, db } from '@/lib/supabase/client'
+import type { Vehicle, Schedule } from '@/types'
+
+type ScheduleWithVehicle = Schedule & {
+  has_interior?: boolean
+  vehicle: Vehicle & { customer: { name: string; apartment: string } }
+}
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+
+export default function CalendarPage() {
+  const supabase = createClient()
+
+  const today = new Date()
+  const [year,  setYear]  = useState(today.getFullYear())
+  const [month, setMonth] = useState(today.getMonth())
+
+  const [schedules,    setSchedules]    = useState<ScheduleWithVehicle[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [searchQuery,  setSearchQuery]  = useState('')
+  const [searchActive, setSearchActive] = useState(false)
+
+  useEffect(() => { fetchSchedules() }, [year, month])
+
+  async function fetchSchedules() {
+    setLoading(true)
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay   = new Date(year, month + 1, 0).getDate()
+    const endDate   = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+    const { data } = await supabase
+      .from('schedules')
+      .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
+      .gte('scheduled_date', startDate)
+      .lte('scheduled_date', endDate)
+      .eq('is_deleted', false)
+      .order('scheduled_date')
+
+    setSchedules((data ?? []) as ScheduleWithVehicle[])
+    setLoading(false)
+  }
+
+  const byDate = useMemo(() => {
+    const map: Record<string, ScheduleWithVehicle[]> = {}
+    schedules.forEach(s => {
+      if (!map[s.scheduled_date]) map[s.scheduled_date] = []
+      map[s.scheduled_date].push(s)
+    })
+    return map
+  }, [schedules])
+
+  const searchHighlights = useMemo(() => {
+    if (!searchQuery.trim()) return new Set<string>()
+    const q = searchQuery.trim().toLowerCase()
+    const matched = schedules.filter(s =>
+      s.vehicle?.plate_number?.toLowerCase().includes(q) ||
+      s.vehicle?.car_name?.toLowerCase().includes(q)
+    )
+    return new Set(matched.map(s => s.scheduled_date))
+  }, [schedules, searchQuery])
+
+  const calendarDays = useMemo(() => {
+    const firstDow = new Date(year, month, 1).getDay()
+    const lastDay  = new Date(year, month + 1, 0).getDate()
+    const cells: (number | null)[] = []
+    for (let i = 0; i < firstDow; i++) cells.push(null)
+    for (let d = 1; d <= lastDay; d++) cells.push(d)
+    while (cells.length % 7 !== 0) cells.push(null)
+    return cells
+  }, [year, month])
+
+  function changeMonth(delta: number) {
+    const d = new Date(year, month + delta, 1)
+    setYear(d.getFullYear())
+    setMonth(d.getMonth())
+    setSelectedDate(null)
+  }
+
+  function formatDateKey(day: number) {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+
+  async function deleteSchedule(scheduleId: string) {
+    await db().from('schedules').update({ is_deleted: true }).eq('id', scheduleId)
+    fetchSchedules()
+  }
+
+  async function changeScheduleDate(scheduleId: string, newDate: string) {
+    await db().from('schedules').update({ scheduled_date: newDate }).eq('id', scheduleId)
+    fetchSchedules()
+  }
+
+  async function toggleInterior(scheduleId: string, current: boolean) {
+    await db().from('schedules').update({ has_interior: !current }).eq('id', scheduleId)
+    fetchSchedules()
+  }
+
+  const selectedSchedules = selectedDate ? (byDate[selectedDate] ?? []) : []
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* 헤더 */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1">
+            <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+              <ChevronLeft size={20} className="text-gray-600" />
+            </button>
+            <span className="text-base font-bold text-gray-900 min-w-[90px] text-center">
+              {year}년 {month + 1}월
+            </span>
+            <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+              <ChevronRight size={20} className="text-gray-600" />
+            </button>
+          </div>
+
+          {searchActive ? (
+            <div className="flex items-center gap-1 flex-1">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="차량번호 / 차량명"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+              <button
+                onClick={() => { setSearchActive(false); setSearchQuery('') }}
+                className="p-1.5 text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setSearchActive(true)}
+              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-blue-600 border border-gray-200 rounded-lg px-3 py-1.5"
+            >
+              <Search size={15} />
+              차량 검색
+            </button>
+          )}
+        </div>
+
+        {searchQuery.trim() && (
+          <div className="max-w-2xl mx-auto mt-1.5">
+            <p className="text-xs text-blue-600">
+              "{searchQuery}" — {searchHighlights.size}개 날짜 하이라이트
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 캘린더 */}
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div className="max-w-2xl mx-auto px-2 py-2">
+          <div className="grid grid-cols-7 mb-1">
+            {WEEKDAYS.map((d, i) => (
+              <div
+                key={d}
+                className={`text-center text-xs font-semibold py-1.5 ${
+                  i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-500'
+                }`}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-0.5">
+            {calendarDays.map((day, idx) => {
+              if (!day) return <div key={`empty-${idx}`} className="h-14" />
+
+              const dateKey      = formatDateKey(day)
+              const daySchedules = byDate[dateKey] ?? []
+              const count        = daySchedules.length
+              const isToday      = dateKey === todayKey
+              const isSelected   = dateKey === selectedDate
+              const isHighlight  = searchQuery.trim() && searchHighlights.has(dateKey)
+              const isOvercount  = daySchedules.some(s => s.is_overcount)
+              const hasInterior  = daySchedules.some(s => s.has_interior)
+              const dow          = new Date(year, month, day).getDay()
+
+              return (
+                <button
+                  key={dateKey}
+                  onClick={() => setSelectedDate(isSelected ? null : dateKey)}
+                  className={`
+                    relative h-14 rounded-lg flex flex-col items-center justify-start pt-1.5 transition-colors
+                    ${isSelected  ? 'bg-blue-600 text-white'
+                    : isHighlight ? 'bg-yellow-50 border-2 border-yellow-400'
+                    : isToday     ? 'bg-blue-50 border border-blue-200'
+                    : 'hover:bg-gray-50 border border-transparent'}
+                  `}
+                >
+                  <span className={`
+                    text-xs font-semibold leading-none
+                    ${isSelected ? 'text-white'
+                    : isHighlight ? 'text-yellow-700'
+                    : isToday    ? 'text-blue-600'
+                    : dow === 0  ? 'text-red-400'
+                    : dow === 6  ? 'text-blue-400'
+                    : 'text-gray-700'}
+                  `}>
+                    {day}
+                  </span>
+
+                  {count > 0 && (
+                    <span className={`
+                      mt-1 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center
+                      ${isSelected  ? 'bg-white text-blue-600'
+                      : isHighlight ? 'bg-yellow-400 text-white'
+                      : isOvercount ? 'bg-orange-100 text-orange-600'
+                      : 'bg-blue-100 text-blue-700'}
+                    `}>
+                      {count}
+                    </span>
+                  )}
+
+                  {/* 실내작업 표시 */}
+                  {hasInterior && !isSelected && (
+                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-green-400" />
+                  )}
+
+                  {isOvercount && !isSelected && (
+                    <span className="absolute top-0.5 right-0.5">
+                      <AlertTriangle size={9} className="text-orange-400" />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {!loading && (
+            <div className="mt-3 text-center text-xs text-gray-400">
+              이번 달 총 {schedules.length}대
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 선택된 날짜 상세 */}
+      {selectedDate && (
+        <div className="border-t border-gray-200 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-900 text-sm">
+                {month + 1}월 {parseInt(selectedDate.split('-')[2])}일 —&nbsp;
+                <span className="text-blue-600">{selectedSchedules.length}대</span>
+              </h3>
+              <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+              {selectedSchedules.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-6">예약 없음</p>
+              ) : (
+                selectedSchedules.map(s => (
+                  <ScheduleRow
+                    key={s.id}
+                    schedule={s}
+                    onDelete={() => deleteSchedule(s.id)}
+                    onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
+                    onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
+                    onRefresh={fetchSchedules}
+                    selectedDate={selectedDate}
+                    supabaseClient={supabase}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── 일정 행 ─── */
+function ScheduleRow({
+  schedule, onDelete, onDateChange, onInteriorToggle, onRefresh, selectedDate, supabaseClient,
+}: {
+  schedule: ScheduleWithVehicle
+  onDelete: () => void
+  onDateChange: (newDate: string) => void
+  onInteriorToggle: () => void
+  onRefresh: () => void
+  selectedDate: string
+  supabaseClient: ReturnType<typeof createClient>
+}) {
+  const [done,         setDone]         = useState(false)
+  const [editingDate,  setEditingDate]  = useState(false)
+  const [newDate,      setNewDate]      = useState(schedule.scheduled_date)
+
+  useEffect(() => {
+    async function check() {
+      const { data } = await supabaseClient
+        .from('wash_records')
+        .select('id')
+        .eq('vehicle_id', schedule.vehicle_id)
+        .eq('wash_date', selectedDate)
+        .maybeSingle()
+      setDone(!!data)
+    }
+    check()
+  }, [schedule.vehicle_id, selectedDate])
+
+  async function saveDate() {
+    if (newDate && newDate !== schedule.scheduled_date) {
+      onDateChange(newDate)
+    }
+    setEditingDate(false)
+  }
+
+  const v = schedule.vehicle
+
+  return (
+    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''}`}>
+      {/* 상단 행: 완료 아이콘 + 차량 정보 + 삭제 버튼 */}
+      <div className="flex items-start gap-3">
+        {done
+          ? <CheckCircle2 size={20} className="text-green-500 flex-shrink-0 mt-0.5" />
+          : <Circle       size={20} className="text-gray-300 flex-shrink-0 mt-0.5" />
+        }
+
+        <div className="flex-1 min-w-0">
+          {/* 차량명 + 번호판 + 배지 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-sm font-semibold ${done ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+              {v?.car_name}
+            </span>
+            <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+              {v?.plate_number}
+            </span>
+            {schedule.is_overcount && (
+              <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
+                <AlertTriangle size={10} />
+                월3회
+              </span>
+            )}
+            {schedule.has_interior && (
+              <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                <Sofa size={10} />
+                실내
+              </span>
+            )}
+          </div>
+
+          {/* 고객명 + 동호수 + 아파트 */}
+          <p className="text-xs text-gray-400 mt-0.5">
+            {v?.customer?.name}
+            {v?.unit_number && ` · ${v.unit_number}`}
+            {v?.customer?.apartment && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-blue-500">
+                <Home size={10} />
+                {v.customer.apartment}
+              </span>
+            )}
+          </p>
+
+          {/* 날짜 변경 */}
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+            {editingDate ? (
+              <>
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={e => setNewDate(e.target.value)}
+                  className="text-xs border border-blue-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <button
+                  onClick={saveDate}
+                  className="text-xs text-white bg-blue-600 px-2 py-0.5 rounded hover:bg-blue-700"
+                >
+                  <Check size={12} />
+                </button>
+                <button
+                  onClick={() => { setEditingDate(false); setNewDate(schedule.scheduled_date) }}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  <X size={12} />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setEditingDate(true)}
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
+              >
+                <Edit2 size={10} />
+                날짜 변경
+              </button>
+            )}
+
+            {/* 실내작업 토글 */}
+            <button
+              onClick={onInteriorToggle}
+              className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded transition-colors ${
+                schedule.has_interior
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+              }`}
+            >
+              <Sofa size={10} />
+              {schedule.has_interior ? '실내 ✓' : '실내 추가'}
+            </button>
+          </div>
+        </div>
+
+        {/* 삭제 버튼 (모든 일정) */}
+        <button
+          onClick={() => {
+            if (confirm('이 일정을 삭제하시겠습니까?')) onDelete()
+          }}
+          className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,2 @@
+-- 실내작업 여부 컬럼 추가
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS has_interior BOOLEAN NOT NULL DEFAULT FALSE;
