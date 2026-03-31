@@ -36,15 +36,14 @@ export default function StaffPage() {
   async function fetchTasks() {
     setLoading(true)
 
-    const { data: schedules } = await supabase
+    const { data: schedules, error } = await supabase
       .from('schedules')
       .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
       .eq('scheduled_date', date)
       .eq('is_deleted', false)
-      .order('sort_order', { ascending: true })
       .order('created_at')
 
-    if (!schedules) { setLoading(false); return }
+    if (error || !schedules) { setLoading(false); return }
 
     const rows = schedules as ScheduleRow[]
 
@@ -80,9 +79,19 @@ export default function StaffPage() {
         memo: '',
         photos: vehiclePhotos,
         uploading: false,
-        expanded: !record,       // 미완료는 기본 펼침
+        expanded: !record,
         washRecordId: record?.id ?? null,
       }
+    })
+
+    // sort_order 기준 정렬 (클라이언트)
+    items.sort((a, b) => {
+      const sa = (a.schedule as any).sort_order
+      const sb = (b.schedule as any).sort_order
+      if (sa != null && sb != null) return sa - sb
+      if (sa != null) return -1
+      if (sb != null) return 1
+      return 0
     })
 
     setTasks(items)
