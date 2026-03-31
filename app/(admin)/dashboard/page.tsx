@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import type { Vehicle, Schedule } from '@/types'
 
@@ -20,12 +20,16 @@ export default function CalendarPage() {
   const [month, setMonth] = useState(today.getMonth())
 
   const [schedules,    setSchedules]    = useState<ScheduleWithVehicle[]>([])
+  const [vehicles,     setVehicles]     = useState<(Vehicle & { customer?: { name: string; apartment: string } })[]>([])
   const [loading,      setLoading]      = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [searchQuery,  setSearchQuery]  = useState('')
   const [searchActive, setSearchActive] = useState(false)
+  const [showAddForm,    setShowAddForm]    = useState(false)
+  const [addVehicleSearch, setAddVehicleSearch] = useState('')
 
   useEffect(() => { fetchSchedules() }, [year, month])
+  useEffect(() => { setShowAddForm(false); setAddVehicleSearch('') }, [selectedDate])
 
   async function fetchSchedules() {
     setLoading(true)
@@ -33,15 +37,22 @@ export default function CalendarPage() {
     const lastDay   = new Date(year, month + 1, 0).getDate()
     const endDate   = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    const { data } = await supabase
-      .from('schedules')
-      .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
-      .gte('scheduled_date', startDate)
-      .lte('scheduled_date', endDate)
-      .eq('is_deleted', false)
-      .order('scheduled_date')
+    const [{ data: scheduleData }, { data: vehicleData }] = await Promise.all([
+      supabase
+        .from('schedules')
+        .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
+        .gte('scheduled_date', startDate)
+        .lte('scheduled_date', endDate)
+        .eq('is_deleted', false)
+        .order('scheduled_date'),
+      supabase
+        .from('vehicles')
+        .select('*, customer:customers(name, apartment)')
+        .neq('status', 'unregistered')
+    ])
 
-    setSchedules((data ?? []) as ScheduleWithVehicle[])
+    setSchedules((scheduleData ?? []) as ScheduleWithVehicle[])
+    setVehicles((vehicleData ?? []) as Vehicle[])
     setLoading(false)
   }
 
@@ -63,6 +74,18 @@ export default function CalendarPage() {
     )
     return new Set(matched.map(s => s.scheduled_date))
   }, [schedules, searchQuery])
+
+  const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
+  const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`
+
+  const regularVehicles = useMemo(() => {
+    return vehicles.filter(v =>
+      v.monthly_count !== 'onetime' &&
+      (v.status === 'active' || v.status === 'paused') &&
+      v.start_date <= monthEnd &&
+      (!v.end_date || v.end_date >= monthStart)
+    )
+  }, [vehicles, monthStart, monthEnd])
 
   const calendarDays = useMemo(() => {
     const firstDow = new Date(year, month, 1).getDay()
@@ -100,7 +123,42 @@ export default function CalendarPage() {
     fetchSchedules()
   }
 
-  const selectedSchedules = selectedDate ? (byDate[selectedDate] ?? []) : []
+  async function addOnetimeSchedule(vehicleId: string) {
+    if (!selectedDate) return
+    await db().from('schedules').insert({
+      vehicle_id: vehicleId,
+      scheduled_date: selectedDate,
+      schedule_type: 'onetime',
+      is_overcount: false,
+      is_deleted: false,
+    })
+    setShowAddForm(false)
+    setAddVehicleSearch('')
+    fetchSchedules()
+  }
+
+  const selectedSchedules = useMemo(() => {
+    const list = selectedDate ? (byDate[selectedDate] ?? []) : []
+    return [...list].sort((a, b) => {
+      const aptA = a.vehicle?.customer?.apartment ?? ''
+      const aptB = b.vehicle?.customer?.apartment ?? ''
+      if (aptA !== aptB) return aptA.localeCompare(aptB, 'ko')
+      const unitA = a.vehicle?.unit_number ?? ''
+      const unitB = b.vehicle?.unit_number ?? ''
+      return unitA.localeCompare(unitB, 'ko')
+    })
+  }, [selectedDate, byDate])
+
+  const filteredAddVehicles = useMemo(() => {
+    if (!addVehicleSearch.trim()) return vehicles.slice(0, 10)
+    const q = addVehicleSearch.toLowerCase()
+    return vehicles.filter(v =>
+      v.plate_number?.toLowerCase().includes(q) ||
+      v.car_name?.toLowerCase().includes(q) ||
+      v.unit_number?.toLowerCase().includes(q) ||
+      v.customer?.name?.toLowerCase().includes(q)
+    ).slice(0, 10)
+  }, [vehicles, addVehicleSearch])
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
   return (
@@ -242,8 +300,10 @@ export default function CalendarPage() {
           </div>
 
           {!loading && (
-            <div className="mt-3 text-center text-xs text-gray-400">
-              이번 달 총 {schedules.length}대
+            <div className="mt-3 text-xs text-gray-600 grid grid-cols-3 gap-3">
+              <div className="text-left text-gray-700">이번달 총 작업대수 {schedules.length}대</div>
+              <div className="text-center">이번달 등록 차량 수 {vehicles.length}대</div>
+              <div className="text-right">정기 차량 수 {regularVehicles.length}대</div>
             </div>
           )}
         </div>
@@ -258,10 +318,56 @@ export default function CalendarPage() {
                 {month + 1}월 {parseInt(selectedDate.split('-')[2])}일 —&nbsp;
                 <span className="text-blue-600">{selectedSchedules.length}대</span>
               </h3>
-              <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddForm(v => !v)}
+                  className="flex items-center gap-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
+                >
+                  <Plus size={12} />
+                  일세차 추가
+                </button>
+                <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
+
+            {/* 일세차 추가 폼 */}
+            {showAddForm && (
+              <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+                <input
+                  autoFocus
+                  type="text"
+                  value={addVehicleSearch}
+                  onChange={e => setAddVehicleSearch(e.target.value)}
+                  placeholder="차량명, 번호판, 동호수, 고객명 검색"
+                  className="w-full text-sm border border-blue-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white mb-2"
+                />
+                {filteredAddVehicles.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-2">검색 결과 없음</p>
+                ) : (
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {filteredAddVehicles.map(v => (
+                      <button
+                        key={v.id}
+                        onClick={() => addOnetimeSchedule(v.id)}
+                        className="w-full text-left flex items-center gap-2 bg-white hover:bg-blue-100 border border-blue-100 rounded-lg px-3 py-2 text-sm transition-colors"
+                      >
+                        <span className="font-medium text-gray-900">{v.car_name}</span>
+                        <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
+                        <span className="text-xs text-gray-400">{v.unit_number}</span>
+                        {v.customer?.apartment && (
+                          <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
+                            <Home size={10} />
+                            {v.customer.apartment}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
               {selectedSchedules.length === 0 ? (
@@ -300,9 +406,11 @@ function ScheduleRow({
   selectedDate: string
   supabaseClient: ReturnType<typeof createClient>
 }) {
-  const [done,         setDone]         = useState(false)
-  const [editingDate,  setEditingDate]  = useState(false)
-  const [newDate,      setNewDate]      = useState(schedule.scheduled_date)
+  const [done,           setDone]           = useState(false)
+  const [editingDate,    setEditingDate]    = useState(false)
+  const [newDate,        setNewDate]        = useState(schedule.scheduled_date)
+  const [editingMemo,    setEditingMemo]    = useState(false)
+  const [adminMemo,      setAdminMemo]      = useState(schedule.admin_memo ?? '')
 
   useEffect(() => {
     async function check() {
@@ -322,6 +430,12 @@ function ScheduleRow({
       onDateChange(newDate)
     }
     setEditingDate(false)
+  }
+
+  async function saveAdminMemo() {
+    await db().from('schedules').update({ admin_memo: adminMemo.trim() || null }).eq('id', schedule.id)
+    setEditingMemo(false)
+    onRefresh()
   }
 
   const v = schedule.vehicle
@@ -416,6 +530,48 @@ function ScheduleRow({
               {schedule.has_interior ? '실내 ✓' : '실내 추가'}
             </button>
           </div>
+
+          {/* 관리자 메모 */}
+          {editingMemo ? (
+            <div className="mt-1.5 flex items-start gap-1.5">
+              <textarea
+                autoFocus
+                value={adminMemo}
+                onChange={e => setAdminMemo(e.target.value)}
+                placeholder="직원에게 전달할 지시사항"
+                rows={2}
+                className="flex-1 text-xs border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none bg-amber-50"
+              />
+              <div className="flex flex-col gap-1">
+                <button onClick={saveAdminMemo} className="text-xs text-white bg-amber-500 px-2 py-0.5 rounded hover:bg-amber-600">
+                  <Check size={12} />
+                </button>
+                <button onClick={() => { setEditingMemo(false); setAdminMemo(schedule.admin_memo ?? '') }} className="text-xs text-gray-400 hover:text-gray-600">
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-1 flex items-center gap-1.5">
+              {schedule.admin_memo ? (
+                <button
+                  onClick={() => setEditingMemo(true)}
+                  className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors max-w-full"
+                >
+                  <Edit2 size={9} />
+                  <span className="truncate max-w-[200px]">{schedule.admin_memo}</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setEditingMemo(true)}
+                  className="flex items-center gap-1 text-xs text-gray-300 hover:text-amber-600 transition-colors"
+                >
+                  <Edit2 size={9} />
+                  지시사항 추가
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 삭제 버튼 (모든 일정) */}

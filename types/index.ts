@@ -48,6 +48,7 @@ export interface Schedule {
   schedule_type: 'regular' | 'onetime'
   is_overcount: boolean
   is_deleted: boolean
+  admin_memo: string | null
   created_at: string
   vehicle?: Vehicle
 }

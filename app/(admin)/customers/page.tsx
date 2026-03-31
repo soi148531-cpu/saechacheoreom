@@ -74,10 +74,19 @@ export default function CustomersPage() {
     unregistered: customers.filter(c => !c.vehicles || c.vehicles.length === 0).length,
   }
 
+  // 이번달 신규/이탈 카운트
+  const thisMonth = (() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+  })()
+  const allVehicles = customers.flatMap(c => c.vehicles ?? [])
+  const newThisMonth  = allVehicles.filter(v => v.start_date?.startsWith(thisMonth)).length
+  const exitThisMonth = allVehicles.filter(v => v.end_date?.startsWith(thisMonth)).length
+
   return (
     <div className="p-4 max-w-2xl mx-auto">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <h1 className="text-xl font-bold text-gray-900">고객 관리</h1>
         <Link
           href="/customers/new"
@@ -86,6 +95,18 @@ export default function CustomersPage() {
           <Plus size={16} />
           신규 등록
         </Link>
+      </div>
+
+      {/* 이번달 신규/이탈 */}
+      <div className="flex gap-3 mb-4">
+        <div className="flex-1 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-center">
+          <p className="text-xs text-blue-500 font-medium">이번달 신규</p>
+          <p className="text-lg font-bold text-blue-700">{newThisMonth}대</p>
+        </div>
+        <div className="flex-1 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-center">
+          <p className="text-xs text-red-400 font-medium">이번달 이탈</p>
+          <p className="text-lg font-bold text-red-600">{exitThisMonth}대</p>
+        </div>
       </div>
 
       {/* 탭 */}

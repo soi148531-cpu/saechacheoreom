@@ -4,7 +4,7 @@
 // Plan SC: SC-04
 
 import { useEffect, useState, useRef } from 'react'
-import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home } from 'lucide-react'
+import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, MessageSquare } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
 import type { Vehicle, Schedule } from '@/types'
@@ -283,11 +283,22 @@ function TaskCard({
       {/* 상세 (펼침) */}
       {task.expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3">
-          {/* 메모 */}
+          {/* 관리자 메모 (읽기 전용) */}
+          {task.schedule.admin_memo && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
+                <MessageSquare size={11} />
+                관리자 지시사항
+              </p>
+              <p className="text-sm text-amber-800 whitespace-pre-wrap">{task.schedule.admin_memo}</p>
+            </div>
+          )}
+
+          {/* 작업자 메모 */}
           <textarea
             value={task.memo}
             onChange={e => onMemoChange(e.target.value)}
-            placeholder="메모 (특이사항, 요청사항 등)"
+            placeholder="작업자 메모 (특이사항, 요청사항 등)"
             rows={2}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
