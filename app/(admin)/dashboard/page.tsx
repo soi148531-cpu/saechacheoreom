@@ -534,7 +534,11 @@ function ScheduleRow({
   }
 
   async function saveAdminMemo() {
-    await db().from('schedules').update({ admin_memo: adminMemo.trim() || null }).eq('id', schedule.id)
+    const { error } = await db().from('schedules').update({ admin_memo: adminMemo.trim() || null }).eq('id', schedule.id)
+    if (error) {
+      alert('저장 실패: ' + error.message)
+      return
+    }
     setEditingMemo(false)
     onRefresh()
   }
