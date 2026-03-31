@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical } from 'lucide-react'
+import { DndContext, closestCenter, type DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { createClient, db } from '@/lib/supabase/client'
 import type { Vehicle, Schedule } from '@/types'
 
@@ -25,11 +28,23 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [searchQuery,  setSearchQuery]  = useState('')
   const [searchActive, setSearchActive] = useState(false)
-  const [showAddForm,    setShowAddForm]    = useState(false)
+  const [showAddForm,      setShowAddForm]      = useState(false)
   const [addVehicleSearch, setAddVehicleSearch] = useState('')
+  const [reorderMode,      setReorderMode]      = useState(false)
+  const [manualOrder,      setManualOrder]      = useState<string[]>([])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+  )
 
   useEffect(() => { fetchSchedules() }, [year, month])
-  useEffect(() => { setShowAddForm(false); setAddVehicleSearch('') }, [selectedDate])
+  useEffect(() => {
+    setShowAddForm(false)
+    setAddVehicleSearch('')
+    setReorderMode(false)
+    setManualOrder([])
+  }, [selectedDate])
 
   async function fetchSchedules() {
     setLoading(true)
@@ -137,8 +152,34 @@ export default function CalendarPage() {
     fetchSchedules()
   }
 
+  function toggleReorderMode() {
+    if (!reorderMode) {
+      setManualOrder(selectedSchedules.map(s => s.id))
+    }
+    setReorderMode(v => !v)
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = manualOrder.indexOf(active.id as string)
+    const newIndex = manualOrder.indexOf(over.id as string)
+    if (oldIndex < 0 || newIndex < 0) return
+    const newOrder = arrayMove(manualOrder, oldIndex, newIndex)
+    setManualOrder(newOrder)
+    await Promise.all(
+      newOrder.map((id, idx) =>
+        db().from('schedules').update({ sort_order: (idx + 1) * 10 }).eq('id', id)
+      )
+    )
+  }
+
   const selectedSchedules = useMemo(() => {
     const list = selectedDate ? (byDate[selectedDate] ?? []) : []
+    const hasSortOrder = list.some(s => s.sort_order != null)
+    if (hasSortOrder) {
+      return [...list].sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999))
+    }
     return [...list].sort((a, b) => {
       const aptA = a.vehicle?.customer?.apartment ?? ''
       const aptB = b.vehicle?.customer?.apartment ?? ''
@@ -148,6 +189,14 @@ export default function CalendarPage() {
       return unitA.localeCompare(unitB, 'ko')
     })
   }, [selectedDate, byDate])
+
+  const displayedSchedules = useMemo(() => {
+    if (reorderMode && manualOrder.length > 0) {
+      const map = new Map(selectedSchedules.map(s => [s.id, s]))
+      return manualOrder.map(id => map.get(id)).filter(Boolean) as ScheduleWithVehicle[]
+    }
+    return selectedSchedules
+  }, [reorderMode, manualOrder, selectedSchedules])
 
   const filteredAddVehicles = useMemo(() => {
     if (!addVehicleSearch.trim()) return vehicles.slice(0, 10)
@@ -318,7 +367,18 @@ export default function CalendarPage() {
                 {month + 1}월 {parseInt(selectedDate.split('-')[2])}일 —&nbsp;
                 <span className="text-blue-600">{selectedSchedules.length}대</span>
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={toggleReorderMode}
+                  className={`flex items-center gap-1 text-xs border px-2 py-1 rounded-lg transition-colors ${
+                    reorderMode
+                      ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <GripVertical size={12} />
+                  {reorderMode ? '완료' : '순서 변경'}
+                </button>
                 <button
                   onClick={() => setShowAddForm(v => !v)}
                   className="flex items-center gap-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
@@ -369,27 +429,68 @@ export default function CalendarPage() {
               </div>
             )}
 
-            <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-              {selectedSchedules.length === 0 ? (
+            <div className="max-h-72 overflow-y-auto">
+              {displayedSchedules.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-6">예약 없음</p>
+              ) : reorderMode ? (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={manualOrder} strategy={verticalListSortingStrategy}>
+                    {displayedSchedules.map(s => (
+                      <SortableRow key={s.id} id={s.id}>
+                        <ScheduleRow
+                          schedule={s}
+                          onDelete={() => deleteSchedule(s.id)}
+                          onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
+                          onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
+                          onRefresh={fetchSchedules}
+                          selectedDate={selectedDate}
+                          supabaseClient={supabase}
+                        />
+                      </SortableRow>
+                    ))}
+                  </SortableContext>
+                </DndContext>
               ) : (
-                selectedSchedules.map(s => (
-                  <ScheduleRow
-                    key={s.id}
-                    schedule={s}
-                    onDelete={() => deleteSchedule(s.id)}
-                    onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
-                    onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                    onRefresh={fetchSchedules}
-                    selectedDate={selectedDate}
-                    supabaseClient={supabase}
-                  />
-                ))
+                <div className="divide-y divide-gray-100">
+                  {displayedSchedules.map(s => (
+                    <ScheduleRow
+                      key={s.id}
+                      schedule={s}
+                      onDelete={() => deleteSchedule(s.id)}
+                      onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
+                      onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
+                      onRefresh={fetchSchedules}
+                      selectedDate={selectedDate}
+                      supabaseClient={supabase}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ─── 드래그 정렬 래퍼 ─── */
+function SortableRow({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : undefined }}
+      className={`flex items-stretch border-b border-gray-100 last:border-0 bg-white ${isDragging ? 'shadow-lg opacity-90' : ''}`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="flex items-center px-2 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 touch-none select-none"
+      >
+        <GripVertical size={16} />
+      </div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
 }

@@ -49,6 +49,7 @@ export interface Schedule {
   is_overcount: boolean
   is_deleted: boolean
   admin_memo: string | null
+  sort_order: number | null
   created_at: string
   vehicle?: Vehicle
 }

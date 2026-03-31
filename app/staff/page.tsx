@@ -40,6 +40,8 @@ export default function StaffPage() {
       .from('schedules')
       .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
       .eq('scheduled_date', date)
+      .eq('is_deleted', false)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at')
 
     if (!schedules) { setLoading(false); return }
