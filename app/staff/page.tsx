@@ -4,7 +4,7 @@
 // Plan SC: SC-04
 
 import { useEffect, useState, useRef } from 'react'
-import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, MessageSquare } from 'lucide-react'
+import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, MessageSquare, AlertCircle } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
 import type { Vehicle, Schedule } from '@/types'
@@ -91,7 +91,7 @@ export default function StaffPage() {
       if (sa != null && sb != null) return sa - sb
       if (sa != null) return -1
       if (sb != null) return 1
-      return 0
+      return new Date(a.schedule.created_at).getTime() - new Date(b.schedule.created_at).getTime()
     })
 
     setTasks(items)
@@ -273,6 +273,11 @@ function TaskCard({
                 초과
               </span>
             )}
+            {task.schedule.admin_memo && (
+              <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold animate-pulse">
+                ⚠️ 지시
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
             {customer?.name} · {v.unit_number} · {CAR_GRADE_LABELS[v.car_grade]}
@@ -294,14 +299,14 @@ function TaskCard({
       {/* 상세 (펼침) */}
       {task.expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3">
-          {/* 관리자 메모 (읽기 전용) */}
+          {/* 관리자 메모 (읽기 전용) - 강조 */}
           {task.schedule.admin_memo && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              <p className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
-                <MessageSquare size={11} />
-                관리자 지시사항
+            <div className="bg-red-50 border-2 border-red-300 rounded-lg px-3 py-3 shadow-sm">
+              <p className="text-xs font-bold text-red-700 mb-1.5 flex items-center gap-1.5">
+                <AlertCircle size={14} className="flex-shrink-0" />
+                ⚠️ 관리자 지시사항
               </p>
-              <p className="text-sm text-amber-800 whitespace-pre-wrap">{task.schedule.admin_memo}</p>
+              <p className="text-sm text-red-800 whitespace-pre-wrap font-medium leading-relaxed">{task.schedule.admin_memo}</p>
             </div>
           )}
 
