@@ -26,7 +26,7 @@ export default function Navbar() {
             className="flex items-center gap-1 bg-blue-500 hover:bg-blue-400 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
           >
             <CheckSquare size={16} />
-            직원 작업
+            직원 페이지
           </Link>
         </div>
       </header>

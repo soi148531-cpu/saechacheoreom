@@ -41,7 +41,7 @@ export default function StaffPage() {
       .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
       .eq('scheduled_date', date)
       .eq('is_deleted', false)
-      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('sort_order', { ascending: true })
       .order('created_at')
 
     if (!schedules) { setLoading(false); return }
@@ -165,7 +165,7 @@ export default function StaffPage() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">직원 작업</h1>
+            <h1 className="text-lg font-bold text-gray-900">직원 페이지</h1>
             <p className="text-xs text-gray-400">새차처럼 세차 서비스</p>
           </div>
           <div className="text-right">
