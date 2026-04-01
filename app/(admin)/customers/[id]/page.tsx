@@ -35,6 +35,10 @@ export default function CustomerDetailPage() {
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading,  setLoading]  = useState(true)
+  // 서비스 정지: 어떤 차량이 정지 대기 중인지, 날짜 선택 값
+  const [pausingId,   setPausingId]   = useState<string | null>(null)
+  const [pauseDate,   setPauseDate]   = useState('')
+  const [pauseSaving, setPauseSaving] = useState(false)
 
   const fetchCustomer = useCallback(async () => {
     const { data } = await supabase
@@ -49,9 +53,35 @@ export default function CustomerDetailPage() {
   useEffect(() => { fetchCustomer() }, [fetchCustomer])
 
   async function toggleVehicleStatus(vehicle: Vehicle) {
-    const next: VehicleStatus = vehicle.status === 'active' ? 'paused' : 'active'
-    await db().from('vehicles').update({ status: next }).eq('id', vehicle.id)
-    fetchCustomer()
+    if (vehicle.status === 'paused') {
+      // 재개: 바로 상태만 변경
+      await db().from('vehicles').update({ status: 'active' }).eq('id', vehicle.id)
+      fetchCustomer()
+    } else {
+      // 정지: 날짜 선택 UI 표시 (today 기본값)
+      const today = new Date().toISOString().split('T')[0]
+      setPauseDate(today)
+      setPausingId(vehicle.id)
+    }
+  }
+
+  async function confirmPause() {
+    if (!pausingId || !pauseDate) return
+    setPauseSaving(true)
+    try {
+      // 1. 선택날짜 이후(이상) 일정 전체 삭제
+      await db()
+        .from('schedules')
+        .delete()
+        .eq('vehicle_id', pausingId)
+        .gte('scheduled_date', pauseDate)
+      // 2. 상태 변경
+      await db().from('vehicles').update({ status: 'paused' }).eq('id', pausingId)
+      setPausingId(null)
+      fetchCustomer()
+    } finally {
+      setPauseSaving(false)
+    }
   }
 
   async function deleteVehicle(vehicleId: string) {
@@ -176,19 +206,47 @@ export default function CustomerDetailPage() {
 
               {/* 정지/재개 버튼 */}
               {(v.status === 'active' || v.status === 'paused') && (
-                <button
-                  onClick={() => toggleVehicleStatus(v)}
-                  className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
-                    v.status === 'active'
-                      ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200'
-                      : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                  }`}
-                >
-                  {v.status === 'active'
-                    ? <><PauseCircle size={14} /> 서비스 정지</>
-                    : <><PlayCircle size={14} /> 서비스 재개</>
-                  }
-                </button>
+                pausingId === v.id ? (
+                  // 날짜 선택 UI
+                  <div className="border border-yellow-200 bg-yellow-50 rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-medium text-yellow-800">⏸️ 정지 기준일 — 이 날짜이후(이상)의 일정이 삭제됩니다</p>
+                    <input
+                      type="date"
+                      value={pauseDate}
+                      onChange={e => setPauseDate(e.target.value)}
+                      className="w-full border border-yellow-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={confirmPause}
+                        disabled={!pauseDate || pauseSaving}
+                        className="flex-1 bg-yellow-500 text-white py-2 rounded-lg text-xs font-semibold hover:bg-yellow-600 disabled:opacity-50"
+                      >
+                        {pauseSaving ? '삭제 중...' : '정지 확인'}
+                      </button>
+                      <button
+                        onClick={() => setPausingId(null)}
+                        className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-200"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => toggleVehicleStatus(v)}
+                    className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      v.status === 'active'
+                        ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200'
+                        : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                    }`}
+                  >
+                    {v.status === 'active'
+                      ? <><PauseCircle size={14} /> 서비스 정지</>
+                      : <><PlayCircle size={14} /> 서비스 재개</>
+                    }
+                  </button>
+                )
               )}
             </div>
           ))
