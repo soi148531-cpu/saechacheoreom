@@ -11,10 +11,7 @@ import {
   CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, MONTHLY_PRICE_TABLE, ONETIME_PRICE_TABLE,
 } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
-import {
-  generateSchedules, getDateLabel, getWeekdayLabel,
-  type RepeatMode,
-} from '@/lib/schedule/generator'
+import { generateSchedules } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount } from '@/types'
 
 interface LegacyVehicleForm {
@@ -23,10 +20,9 @@ interface LegacyVehicleForm {
   unit_number:    string
   car_grade:      CarGrade
   monthly_count:  MonthlyCount
-  repeat_mode:    RepeatMode
   start_date:     string
   end_date:       string
-  custom_price:   string  // 월 가격 직접 입력 가능
+  custom_price:   string
 }
 
 const emptyVehicle = (): LegacyVehicleForm => ({
@@ -35,7 +31,6 @@ const emptyVehicle = (): LegacyVehicleForm => ({
   unit_number:   '',
   car_grade:     'mid_suv',
   monthly_count: 'monthly_2',
-  repeat_mode:   'date',
   start_date:    '',
   end_date:      '',
   custom_price:  '',
@@ -76,12 +71,6 @@ export default function LegacyCustomerPage() {
     return Math.round(monthlyPrice / cnt)
   }, [monthlyPrice, vehicle.monthly_count])
 
-  const repeatPreview = useMemo(() => {
-    if (vehicle.monthly_count !== 'monthly_1' || !vehicle.start_date) return null
-    const d = new Date(vehicle.start_date)
-    return vehicle.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
-  }, [vehicle.monthly_count, vehicle.repeat_mode, vehicle.start_date])
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim() || !apartment.trim()) {
@@ -92,11 +81,11 @@ export default function LegacyCustomerPage() {
       setError('차량명과 차량번호는 필수입니다')
       return
     }
-    if (!vehicle.start_date || !vehicle.end_date) {
-      setError('서비스 시작일과 종료일을 입력해주세요')
+    if (!vehicle.start_date) {
+      setError('서비스 시작일을 입력해주세요')
       return
     }
-    if (vehicle.start_date >= vehicle.end_date) {
+    if (vehicle.end_date && vehicle.start_date >= vehicle.end_date) {
       setError('종료일은 시작일보다 이후여야 합니다')
       return
     }
@@ -126,14 +115,14 @@ export default function LegacyCustomerPage() {
           customer_id:   customer.id,
           car_name:      vehicle.car_name.trim(),
           plate_number:  vehicle.plate_number.trim().replace(/\s/g, ''),
-          unit_number:   vehicle.unit_number.trim(),
+          unit_number:   vehicle.unit_number.trim() || null,
           car_grade:     vehicle.car_grade,
           monthly_count: vehicle.monthly_count,
-          repeat_mode:   vehicle.repeat_mode,
+          repeat_mode:   'date',
           monthly_price: monthlyPrice || null,
           unit_price:    unitPrice || null,
           start_date:    vehicle.start_date,
-          end_date:      vehicle.end_date,
+          end_date:      vehicle.end_date || null,
           status:        vehicle.monthly_count === 'onetime' ? 'irregular' : 'active',
           is_legacy:     true,
         })
@@ -145,7 +134,8 @@ export default function LegacyCustomerPage() {
       // 3. 시작일 ~ 종료일 기간 내 일정 생성 (비정기 제외)
       if (vehicle.monthly_count !== 'onetime') {
         const startDate = new Date(vehicle.start_date)
-        const endDate   = new Date(vehicle.end_date)
+        const endDateStr = vehicle.end_date
+        const endDate = endDateStr ? new Date(endDateStr) : new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate())
         const monthsAhead = Math.max(1,
           (endDate.getFullYear() - startDate.getFullYear()) * 12
           + (endDate.getMonth() - startDate.getMonth())
@@ -155,12 +145,14 @@ export default function LegacyCustomerPage() {
           savedVehicle.id,
           startDate,
           vehicle.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
-          vehicle.repeat_mode,
+          'date',
           monthsAhead
         )
 
-        // 종료일까지만 필터링
-        const filtered = allSchedules.filter(s => s.scheduled_date <= vehicle.end_date)
+        // 종료일이 있으면 그당일까지만 필터링
+        const filtered = endDateStr
+          ? allSchedules.filter(s => s.scheduled_date <= endDateStr)
+          : allSchedules
 
         if (filtered.length > 0) {
           const { error: schErr } = await supabase
@@ -201,7 +193,7 @@ export default function LegacyCustomerPage() {
 
       {/* 안내 배너 */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 mb-5">
-        ◆ 기존 고객은 <strong>종료일</strong>까지만 일정이 생성되며, 캘린더에 ◆ 기호로 표시됩니다.
+        ◆ 기존 고객은 일정이 캘린더에 ◆ 기호로 표시됩니다. 종료일 입력 시 해당 기간만 일정 생성됩니다.
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -312,7 +304,7 @@ export default function LegacyCustomerPage() {
                   className={inputCls}
                 />
               </Field>
-              <Field label="서비스 종료일" required>
+              <Field label="서비스 종료일">
                 <input
                   type="date"
                   value={vehicle.end_date}
@@ -322,43 +314,14 @@ export default function LegacyCustomerPage() {
               </Field>
             </div>
 
-            {/* 월1회: 반복 방식 */}
-            {vehicle.monthly_count === 'monthly_1' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  반복 방식
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['date', 'weekday'] as RepeatMode[]).map(mode => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => updateVehicle('repeat_mode', mode)}
-                      className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                        vehicle.repeat_mode === mode
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-                      }`}
-                    >
-                      {mode === 'date' ? '매월 N일' : 'N번째 요일'}
-                    </button>
-                  ))}
-                </div>
-                {repeatPreview && (
-                  <p className="mt-2 text-xs text-blue-600 font-medium bg-blue-50 rounded-lg px-3 py-2">
-                    반복: {repeatPreview}
-                  </p>
-                )}
-              </div>
-            )}
-
             {/* 월 가격 (직접 입력 가능) */}
             <Field label="월 가격 (선택 — 비우면 가격표 기준 자동 입력)">
               <input
                 value={vehicle.custom_price}
                 onChange={e => updateVehicle('custom_price', e.target.value)}
                 placeholder={`가격표 기준: ${formatPrice(getMonthlyPriceForGrade(vehicle.car_grade, vehicle.monthly_count))}`}
-                type="number"
+                type="text"
+                inputMode="numeric"
                 className={inputCls}
               />
             </Field>
