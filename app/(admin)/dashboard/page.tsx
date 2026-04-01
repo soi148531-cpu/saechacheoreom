@@ -554,6 +554,11 @@ function ScheduleRow({
                 월3회
               </span>
             )}
+            {v?.is_legacy && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">
+                ◆ 기존
+              </span>
+            )}
             {schedule.has_interior && (
               <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
                 <Sofa size={10} />

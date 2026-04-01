@@ -88,13 +88,21 @@ export default function CustomersPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-xl font-bold text-gray-900">고객 관리</h1>
-        <Link
-          href="/customers/new"
-          className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          신규 등록
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/customers/legacy"
+            className="flex items-center gap-1 bg-amber-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+          >
+            ◆ 기존 고객
+          </Link>
+          <Link
+            href="/customers/new"
+            className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={16} />
+            신규 등록
+          </Link>
+        </div>
       </div>
 
       {/* 이번달 신규/이탈 */}
