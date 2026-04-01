@@ -50,6 +50,7 @@ export interface Schedule {
   schedule_type: 'regular' | 'onetime'
   is_overcount: boolean
   is_deleted: boolean
+  has_interior: boolean
   admin_memo: string | null
   sort_order: number | null
   created_at: string

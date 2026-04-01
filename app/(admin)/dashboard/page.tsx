@@ -134,7 +134,11 @@ export default function CalendarPage() {
   }
 
   async function toggleInterior(scheduleId: string, current: boolean) {
-    await db().from('schedules').update({ has_interior: !current }).eq('id', scheduleId)
+    const { error } = await db().from('schedules').update({ has_interior: !current }).eq('id', scheduleId)
+    if (error) {
+      alert('실내 저장 실패: ' + error.message)
+      return
+    }
     fetchSchedules()
   }
 

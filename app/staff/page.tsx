@@ -4,9 +4,9 @@
 // Plan SC: SC-04
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X } from 'lucide-react'
+import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X, Sofa } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
-import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
+import { CAR_GRADE_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
 import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleRow = Schedule & {
@@ -183,11 +183,14 @@ export default function StaffPage() {
         }
       }
 
+      const hasInterior = task.schedule.has_interior
+      const interiorPrice = hasInterior ? INTERIOR_PRICE : 0
+
       const payload: Record<string, unknown> = {
         vehicle_id: v.id,
         schedule_id: task.schedule.id,
         wash_date: date,
-        price: v.unit_price ?? 0,
+        price: (v.unit_price ?? 0) + interiorPrice,
         memo: task.memo.trim() || null,
       }
 
@@ -436,6 +439,18 @@ function TaskCard({
             {task.schedule.is_overcount && (
               <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
                 초과
+              </span>
+            )}
+            {task.schedule.has_interior && (
+              <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">
+                <Sofa size={10} />
+                실내 포함
+              </span>
+            )}
+            {!task.schedule.has_interior && (v.interior_count ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5 text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-medium border border-green-200">
+                <Sofa size={10} />
+                실내{v.interior_count}회
               </span>
             )}
             {task.adminNote && (
