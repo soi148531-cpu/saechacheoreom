@@ -442,7 +442,6 @@ export default function CalendarPage() {
                           onDelete={() => deleteSchedule(s.id)}
                           onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
                           onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                          onRefresh={fetchSchedules}
                           selectedDate={selectedDate}
                           supabaseClient={supabase}
                         />
@@ -459,7 +458,6 @@ export default function CalendarPage() {
                       onDelete={() => deleteSchedule(s.id)}
                       onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
                       onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                      onRefresh={fetchSchedules}
                       selectedDate={selectedDate}
                       supabaseClient={supabase}
                     />
@@ -497,21 +495,18 @@ function SortableRow({ id, children }: { id: string; children: React.ReactNode }
 
 /* ─── 일정 행 ─── */
 function ScheduleRow({
-  schedule, onDelete, onDateChange, onInteriorToggle, onRefresh, selectedDate, supabaseClient,
+  schedule, onDelete, onDateChange, onInteriorToggle, selectedDate, supabaseClient,
 }: {
   schedule: ScheduleWithVehicle
   onDelete: () => void
   onDateChange: (newDate: string) => void
   onInteriorToggle: () => void
-  onRefresh: () => void
   selectedDate: string
   supabaseClient: ReturnType<typeof createClient>
 }) {
   const [done,           setDone]           = useState(false)
   const [editingDate,    setEditingDate]    = useState(false)
   const [newDate,        setNewDate]        = useState(schedule.scheduled_date)
-  const [editingMemo,    setEditingMemo]    = useState(false)
-  const [adminMemo,      setAdminMemo]      = useState(schedule.admin_memo ?? '')
 
   useEffect(() => {
     async function check() {
@@ -531,16 +526,6 @@ function ScheduleRow({
       onDateChange(newDate)
     }
     setEditingDate(false)
-  }
-
-  async function saveAdminMemo() {
-    const { error } = await db().from('schedules').update({ admin_memo: adminMemo.trim() || null }).eq('id', schedule.id)
-    if (error) {
-      alert('저장 실패: ' + error.message)
-      return
-    }
-    setEditingMemo(false)
-    onRefresh()
   }
 
   const v = schedule.vehicle
@@ -636,47 +621,6 @@ function ScheduleRow({
             </button>
           </div>
 
-          {/* 관리자 메모 */}
-          {editingMemo ? (
-            <div className="mt-1.5 flex items-start gap-1.5">
-              <textarea
-                autoFocus
-                value={adminMemo}
-                onChange={e => setAdminMemo(e.target.value)}
-                placeholder="직원에게 전달할 지시사항"
-                rows={2}
-                className="flex-1 text-xs border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none bg-amber-50"
-              />
-              <div className="flex flex-col gap-1">
-                <button onClick={saveAdminMemo} className="text-xs text-white bg-amber-500 px-2 py-0.5 rounded hover:bg-amber-600">
-                  <Check size={12} />
-                </button>
-                <button onClick={() => { setEditingMemo(false); setAdminMemo(schedule.admin_memo ?? '') }} className="text-xs text-gray-400 hover:text-gray-600">
-                  <X size={12} />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-1 flex items-center gap-1.5">
-              {schedule.admin_memo ? (
-                <button
-                  onClick={() => setEditingMemo(true)}
-                  className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors max-w-full"
-                >
-                  <Edit2 size={9} />
-                  <span className="truncate max-w-[200px]">{schedule.admin_memo}</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => setEditingMemo(true)}
-                  className="flex items-center gap-1 text-xs text-gray-300 hover:text-amber-600 transition-colors"
-                >
-                  <Edit2 size={9} />
-                  지시사항 추가
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
         {/* 삭제 버튼 (모든 일정) */}

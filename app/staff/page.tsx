@@ -4,7 +4,7 @@
 // Plan SC: SC-04
 
 import { useEffect, useState, useRef } from 'react'
-import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, MessageSquare, AlertCircle } from 'lucide-react'
+import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
 import type { Vehicle, Schedule } from '@/types'
@@ -16,11 +16,13 @@ type ScheduleRow = Schedule & {
 interface TaskItem {
   schedule: ScheduleRow
   done: boolean
-  memo: string
-  photos: string[]        // public URLs
+  memo: string          // 작업자 메모
+  adminNote: string     // 관리자 작업지시
+  photos: string[]
   uploading: boolean
   expanded: boolean
   washRecordId: string | null
+  editingAdminNote: boolean
 }
 
 export default function StaffPage() {
@@ -47,44 +49,44 @@ export default function StaffPage() {
 
     const rows = schedules as ScheduleRow[]
 
-    // 오늘 날짜 wash_record 이미 있는 것 확인
     const vehicleIds = rows.map(s => s.vehicle_id)
     const { data: records } = vehicleIds.length > 0
       ? await supabase
           .from('wash_records')
-          .select('id, vehicle_id')
+          .select('id, vehicle_id, memo, admin_note')
           .in('vehicle_id', vehicleIds)
           .eq('wash_date', date)
-      : { data: [] as Array<{ id: string; vehicle_id: string }> }
+      : { data: [] as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null }> }
 
-    // 각 schedule의 사진 조회
-    const { data: photos } = await supabase
-      .from('wash_photos')
-      .select('vehicle_id, photo_url')
-      .in('vehicle_id', vehicleIds)
-      .gte('created_at', `${date}T00:00:00`)
-      .lte('created_at', `${date}T23:59:59`)
+    const { data: photos } = vehicleIds.length > 0
+      ? await supabase
+          .from('wash_photos')
+          .select('vehicle_id, photo_url')
+          .in('vehicle_id', vehicleIds)
+          .gte('created_at', `${date}T00:00:00`)
+          .lte('created_at', `${date}T23:59:59`)
+      : { data: [] as Array<{ vehicle_id: string; photo_url: string }> }
 
-    const photoRows = (photos ?? []) as Array<{ vehicle_id: string; photo_url: string }>
-    const recordRows = (records ?? []) as Array<{ id: string; vehicle_id: string }>
+    const photoRows  = (photos  ?? []) as Array<{ vehicle_id: string; photo_url: string }>
+    const recordRows = (records ?? []) as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null }>
 
     const items: TaskItem[] = rows.map(s => {
       const record = recordRows.find(r => r.vehicle_id === s.vehicle_id)
-      const vehiclePhotos = photoRows
-        .filter(p => p.vehicle_id === s.vehicle_id)
-        .map(p => p.photo_url)
+      const vehiclePhotos = photoRows.filter(p => p.vehicle_id === s.vehicle_id).map(p => p.photo_url)
       return {
-        schedule: s as any,
-        done: !!record,
-        memo: '',
-        photos: vehiclePhotos,
-        uploading: false,
-        expanded: !record,
-        washRecordId: record?.id ?? null,
+        schedule:         s as any,
+        done:             !!record,
+        memo:             record?.memo ?? '',
+        adminNote:        record?.admin_note ?? '',
+        photos:           vehiclePhotos,
+        uploading:        false,
+        expanded:         !record,
+        washRecordId:     record?.id ?? null,
+        editingAdminNote: false,
       }
     })
 
-    // sort_order 기준 정렬 (클라이언트)
+    // sort_order 기준 정렬
     items.sort((a, b) => {
       const sa = (a.schedule as any).sort_order
       const sb = (b.schedule as any).sort_order
@@ -107,13 +109,11 @@ export default function StaffPage() {
     const v = task.schedule.vehicle
 
     if (task.done) {
-      // 완료 취소 — wash_record 삭제
       if (task.washRecordId) {
         await db().from('wash_records').delete().eq('id', task.washRecordId)
       }
       updateTask(idx, { done: false, washRecordId: null })
     } else {
-      // 완료 처리 — wash_record 생성
       const { data: rec } = await db()
         .from('wash_records')
         .insert({
@@ -121,6 +121,7 @@ export default function StaffPage() {
           wash_date:  date,
           price:      v.unit_price ?? 0,
           memo:       task.memo.trim() || null,
+          admin_note: task.adminNote.trim() || null,
         })
         .select()
         .single()
@@ -129,6 +130,24 @@ export default function StaffPage() {
         updateTask(idx, { done: true, washRecordId: rec.id, expanded: false })
       }
     }
+  }
+
+  async function saveAdminNote(idx: number) {
+    const task = tasks[idx]
+    if (!task.washRecordId) {
+      // 완료 전이면 상태만 저장 (완료 시 DB 반영)
+      updateTask(idx, { editingAdminNote: false })
+      return
+    }
+    const { error } = await db()
+      .from('wash_records')
+      .update({ admin_note: task.adminNote.trim() || null })
+      .eq('id', task.washRecordId)
+    if (error) {
+      alert('저장 실패: ' + error.message)
+      return
+    }
+    updateTask(idx, { editingAdminNote: false })
   }
 
   async function uploadPhoto(idx: number, file: File) {
@@ -153,7 +172,6 @@ export default function StaffPage() {
       .from('photos')
       .getPublicUrl(path)
 
-    // wash_photos 테이블에 저장
     await db().from('wash_photos').insert({
       vehicle_id: v.id,
       photo_url:  publicUrl,
@@ -189,7 +207,6 @@ export default function StaffPage() {
             </p>
           </div>
         </div>
-        {/* 진행 바 */}
         {tasks.length > 0 && (
           <div className="h-1 bg-gray-100">
             <div
@@ -215,6 +232,10 @@ export default function StaffPage() {
                 task={task}
                 onToggle={() => toggleDone(idx)}
                 onMemoChange={v => updateTask(idx, { memo: v })}
+                onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
+                onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
+                onAdminNoteSave={() => saveAdminNote(idx)}
+                onAdminNoteCancel={() => updateTask(idx, { editingAdminNote: false })}
                 onExpand={() => updateTask(idx, { expanded: !task.expanded })}
                 onPhotoUpload={file => uploadPhoto(idx, file)}
               />
@@ -228,11 +249,17 @@ export default function StaffPage() {
 
 /* ─── 작업 카드 ─── */
 function TaskCard({
-  task, onToggle, onMemoChange, onExpand, onPhotoUpload,
+  task, onToggle, onMemoChange, onAdminNoteChange,
+  onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
+  onExpand, onPhotoUpload,
 }: {
   task: TaskItem
   onToggle: () => void
   onMemoChange: (v: string) => void
+  onAdminNoteChange: (v: string) => void
+  onAdminNoteEditStart: () => void
+  onAdminNoteSave: () => void
+  onAdminNoteCancel: () => void
   onExpand: () => void
   onPhotoUpload: (f: File) => void
 }) {
@@ -246,22 +273,17 @@ function TaskCard({
     }`}>
       {/* 요약 행 */}
       <div className="flex items-center gap-3 p-4">
-        {/* 완료 체크 */}
         <button
           onClick={onToggle}
           className={`flex-shrink-0 transition-colors ${
             task.done ? 'text-green-500' : 'text-gray-300 hover:text-blue-400'
           }`}
         >
-          {task.done
-            ? <CheckCircle2 size={28} />
-            : <Circle size={28} />
-          }
+          {task.done ? <CheckCircle2 size={28} /> : <Circle size={28} />}
         </button>
 
-        {/* 차량 정보 */}
         <div className="flex-1 min-w-0" onClick={onExpand} role="button">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`font-semibold text-gray-900 ${task.done ? 'line-through text-gray-400' : ''}`}>
               {v.car_name}
             </span>
@@ -273,9 +295,9 @@ function TaskCard({
                 초과
               </span>
             )}
-            {task.schedule.admin_memo && (
-              <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold animate-pulse">
-                ⚠️ 지시
+            {task.adminNote && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">
+                📋 지시
               </span>
             )}
           </div>
@@ -290,7 +312,6 @@ function TaskCard({
           </p>
         </div>
 
-        {/* 펼침 토글 */}
         <button onClick={onExpand} className="text-gray-400 flex-shrink-0">
           {task.expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -299,25 +320,65 @@ function TaskCard({
       {/* 상세 (펼침) */}
       {task.expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3">
-          {/* 관리자 메모 (읽기 전용) - 강조 */}
-          {task.schedule.admin_memo && (
-            <div className="bg-red-50 border-2 border-red-300 rounded-lg px-3 py-3 shadow-sm">
-              <p className="text-xs font-bold text-red-700 mb-1.5 flex items-center gap-1.5">
-                <AlertCircle size={14} className="flex-shrink-0" />
-                ⚠️ 관리자 지시사항
-              </p>
-              <p className="text-sm text-red-800 whitespace-pre-wrap font-medium leading-relaxed">{task.schedule.admin_memo}</p>
+
+          {/* 관리자 작업지시 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-amber-700">📋 관리자 작업지시</p>
+              {!task.editingAdminNote && (
+                <button
+                  onClick={onAdminNoteEditStart}
+                  className="text-xs text-amber-600 hover:text-amber-700"
+                >
+                  {task.adminNote ? '수정' : '+ 작성'}
+                </button>
+              )}
             </div>
-          )}
+            {task.editingAdminNote ? (
+              <div className="flex items-start gap-1.5">
+                <textarea
+                  autoFocus
+                  value={task.adminNote}
+                  onChange={e => onAdminNoteChange(e.target.value)}
+                  placeholder="관리자 작업지시 내용"
+                  rows={2}
+                  className="flex-1 text-sm border border-amber-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50"
+                />
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={onAdminNoteSave}
+                    className="text-white bg-amber-500 px-2 py-1 rounded hover:bg-amber-600"
+                  >
+                    <Check size={13} />
+                  </button>
+                  <button
+                    onClick={onAdminNoteCancel}
+                    className="text-gray-400 hover:text-gray-600 px-2 py-1"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+            ) : task.adminNote ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-sm text-amber-800 whitespace-pre-wrap">{task.adminNote}</p>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-300">작업지시 없음</p>
+            )}
+          </div>
 
           {/* 작업자 메모 */}
-          <textarea
-            value={task.memo}
-            onChange={e => onMemoChange(e.target.value)}
-            placeholder="작업자 메모 (특이사항, 요청사항 등)"
-            rows={2}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">작업자 메모</p>
+            <textarea
+              value={task.memo}
+              onChange={e => onMemoChange(e.target.value)}
+              placeholder="특이사항, 요청사항 등"
+              rows={2}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
 
           {/* 사진 업로드 */}
           <div>
@@ -345,7 +406,6 @@ function TaskCard({
               {task.uploading ? '업로드 중...' : '사진 촬영 / 업로드'}
             </button>
 
-            {/* 사진 목록 */}
             {task.photos.length > 0 && (
               <div className="flex gap-2 mt-2 flex-wrap">
                 {task.photos.map((url, i) => (

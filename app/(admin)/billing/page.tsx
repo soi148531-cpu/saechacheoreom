@@ -1,10 +1,10 @@
 'use client'
 
 // Design Ref: §5.3 — 청구 현황 (월별, POS식 정산)
-// Plan SC: SC-03 월말 정산 금액 자동 계산, SC-04 카카오톡 청구 발송
+// Plan SC: SC-03 월말 정산 금액 자동 계산
 
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Send, CheckCircle, Clock, AlertCircle, Plus, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, X } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
@@ -14,9 +14,9 @@ interface BillingSummary {
   vehicle:       Vehicle
   records:       WashRecord[]
   extraItems:    BillingItem[]
-  washTotal:     number   // 세차 실적 합계
-  extraTotal:    number   // 추가 항목 합계
-  totalAmount:   number   // 전체 합계
+  washTotal:     number
+  extraTotal:    number
+  totalAmount:   number
   paymentStatus: PaymentStatus
   paidAmount:    number
   billingId:     string | null
@@ -30,7 +30,6 @@ const STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string; icon:
   unpaid:  { label: '미입금',   color: 'text-red-600 bg-red-50',      icon: Clock },
 }
 
-// 빠른 추가 항목 프리셋
 const PRESETS = [
   { name: '실내청소',   price: INTERIOR_PRICE },
   { name: '유리막코팅', price: 30000 },
@@ -43,7 +42,6 @@ export default function BillingPage() {
   const [summaries,   setSummaries]   = useState<BillingSummary[]>([])
   const [loading,     setLoading]     = useState(true)
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
-  // 항목 추가 폼 상태 (vehicleId → NewItem)
   const [addingItem,  setAddingItem]  = useState<Record<string, NewItem>>({})
   const [showAddForm, setShowAddForm] = useState<string | null>(null)
 
@@ -104,7 +102,6 @@ export default function BillingPage() {
     setYearMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
-  // billing 레코드 upsert 후 ID 반환
   async function ensureBilling(summary: BillingSummary): Promise<string> {
     if (summary.billingId) return summary.billingId
     const { data } = await db()
@@ -154,7 +151,6 @@ export default function BillingPage() {
       quantity:   qty,
       amount:     price * qty,
     })
-    // 청구 합계 업데이트
     await db().from('billings')
       .update({ total_amount: summary.totalAmount + price * qty })
       .eq('id', billingId)
@@ -170,30 +166,6 @@ export default function BillingPage() {
         .eq('id', summary.billingId)
     }
     fetchBilling()
-  }
-
-  function copyKakaoMessage(summary: BillingSummary) {
-    const v        = summary.vehicle
-    const customer = (v as any).customer
-    const lines = [
-      `[새차처럼] ${yearMonth.replace('-', '년 ')}월 세차 청구 안내`,
-      '━━━━━━━━━━━━━━━━━',
-      `고객명: ${customer?.name ?? ''} 님`,
-      `차량: ${v.car_name} (${v.plate_number})`,
-      '━━━━━━━━━━━━━━━━━',
-      ...summary.records.map(r => {
-        const d = new Date(r.wash_date)
-        return `· ${d.getMonth()+1}/${d.getDate()} 세차: ${formatPrice(r.price)}`
-      }),
-      ...summary.extraItems.map(i =>
-        `· ${i.item_name} × ${i.quantity}: ${formatPrice(i.amount)}`
-      ),
-      '━━━━━━━━━━━━━━━━━',
-      `청구금액: ${formatPrice(summary.totalAmount)}`,
-      '입금계좌: (계좌번호를 입력해주세요)',
-    ]
-    navigator.clipboard.writeText(lines.join('\n'))
-    alert('카카오톡 메시지가 클립보드에 복사되었습니다!')
   }
 
   const totalUnpaid = summaries.filter(s => s.paymentStatus !== 'paid').length
@@ -240,9 +212,9 @@ export default function BillingPage() {
       ) : (
         <div className="space-y-3">
           {summaries.map(s => {
-            const v          = s.vehicle
-            const cfg        = STATUS_CONFIG[s.paymentStatus]
-            const Icon       = cfg.icon
+            const v        = s.vehicle
+            const cfg      = STATUS_CONFIG[s.paymentStatus]
+            const Icon     = cfg.icon
             const isSelected = selectedId === v.id
             const isAdding   = showAddForm === v.id
             const newItem    = addingItem[v.id] ?? { name: '', price: '', qty: '1' }
@@ -252,11 +224,19 @@ export default function BillingPage() {
                 {/* 요약 행 */}
                 <button
                   onClick={() => setSelectedId(isSelected ? null : v.id)}
-                  className="w-full flex items-start justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-start justify-between p-4 text-left"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-gray-900">{v.car_name}</span>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-semibold text-gray-900">{((s.vehicle as any).customer?.name) ?? '고객'}님</span>
+                      {((s.vehicle as any).customer?.phone) && (
+                        <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                          {((s.vehicle as any).customer?.phone)}
+                        </span>
+                      )}
+                      <span className="font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded text-sm">
+                        {v.car_name}
+                      </span>
                       <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{v.plate_number}</span>
                     </div>
                     <div className="text-xs text-gray-500">
@@ -309,14 +289,11 @@ export default function BillingPage() {
                         </button>
                       </div>
 
-                      {/* 기존 추가 항목 목록 */}
                       {s.extraItems.length > 0 && (
                         <div className="space-y-1 mb-2">
                           {s.extraItems.map(item => (
                             <div key={item.id} className="flex items-center justify-between text-sm bg-blue-50 rounded-lg px-3 py-1.5">
-                              <span className="text-gray-700">
-                                {item.item_name} × {item.quantity}
-                              </span>
+                              <span className="text-gray-700">{item.item_name} × {item.quantity}</span>
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-blue-700">{formatPrice(item.amount)}</span>
                                 <button
@@ -335,10 +312,8 @@ export default function BillingPage() {
                         </div>
                       )}
 
-                      {/* 항목 추가 폼 */}
                       {isAdding && (
                         <div className="bg-gray-50 rounded-xl p-3 space-y-2">
-                          {/* 프리셋 빠른 선택 */}
                           <div className="flex gap-1.5 flex-wrap">
                             {PRESETS.map(p => (
                               <button
@@ -415,15 +390,6 @@ export default function BillingPage() {
                         </button>
                       ))}
                     </div>
-
-                    {/* ⑤ 카카오 발송 */}
-                    <button
-                      onClick={() => copyKakaoMessage(s)}
-                      className="w-full flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                    >
-                      <Send size={15} />
-                      카카오톡 청구 메시지 복사
-                    </button>
                   </div>
                 )}
               </div>
