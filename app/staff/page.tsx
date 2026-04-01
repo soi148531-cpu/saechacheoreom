@@ -10,7 +10,14 @@ import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
 import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleRow = Schedule & {
+  admin_memo?: string | null
   vehicle: Vehicle & { customer: { name: string; apartment: string } }
+}
+
+type SchemaSupport = {
+  scheduleAdminMemo: boolean
+  washAdminNote: boolean
+  washCompletedBy: boolean
 }
 
 interface TaskItem {
@@ -33,15 +40,52 @@ export default function StaffPage() {
   const [tasks,   setTasks]   = useState<TaskItem[]>([])
   const [loading, setLoading] = useState(true)
   const [date,    setDate]    = useState(today)
+  const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(null)
+  const [savingKey, setSavingKey] = useState<string | null>(null)
 
-  useEffect(() => { fetchTasks() }, [fetchTasks])
+  const detectSchemaSupport = useCallback(async () => {
+    const [{ error: scheduleAdminMemoError }, { error: washAdminNoteError }, { error: washCompletedByError }] = await Promise.all([
+      supabase.from('schedules').select('id, admin_memo').limit(1),
+      supabase.from('wash_records').select('id, admin_note').limit(1),
+      supabase.from('wash_records').select('id, completed_by').limit(1),
+    ])
+
+    const support = {
+      scheduleAdminMemo: !scheduleAdminMemoError,
+      washAdminNote: !washAdminNoteError,
+      washCompletedBy: !washCompletedByError,
+    }
+
+    setSchemaSupport(prev => {
+      if (
+        prev?.scheduleAdminMemo === support.scheduleAdminMemo &&
+        prev?.washAdminNote === support.washAdminNote &&
+        prev?.washCompletedBy === support.washCompletedBy
+      ) {
+        return prev
+      }
+      return support
+    })
+
+    return support
+  }, [supabase])
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
 
+    const support = schemaSupport ?? await detectSchemaSupport()
+
+    const scheduleSelect = support.scheduleAdminMemo
+      ? '*, vehicle:vehicles(*, customer:customers(name, apartment)), admin_memo'
+      : '*, vehicle:vehicles(*, customer:customers(name, apartment))'
+
+    const washRecordColumns = ['id', 'vehicle_id', 'memo']
+    if (support.washAdminNote) washRecordColumns.push('admin_note')
+    if (support.washCompletedBy) washRecordColumns.push('completed_by')
+
     const { data: schedules, error } = await supabase
       .from('schedules')
-      .select('*, vehicle:vehicles(*, customer:customers(name, apartment))')
+      .select(scheduleSelect)
       .eq('scheduled_date', date)
       .eq('is_deleted', false)
       .order('created_at')
@@ -54,7 +98,7 @@ export default function StaffPage() {
     const { data: records } = vehicleIds.length > 0
       ? await supabase
           .from('wash_records')
-          .select('id, vehicle_id, memo, admin_note, completed_by')
+          .select(washRecordColumns.join(','))
           .in('vehicle_id', vehicleIds)
           .eq('wash_date', date)
       : { data: [] as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null; completed_by: string | null }> }
@@ -78,7 +122,7 @@ export default function StaffPage() {
         schedule:         s as ScheduleRow,
         done:             !!record,
         memo:             record?.memo ?? '',
-        adminNote:        record?.admin_note ?? '',
+        adminNote:        s.admin_memo ?? record?.admin_note ?? '',
         completedBy:      (record?.completed_by as 'worker' | 'admin' | null) ?? null,
         photos:           vehiclePhotos,
         uploading:        false,
@@ -100,7 +144,9 @@ export default function StaffPage() {
 
     setTasks(items)
     setLoading(false)
-  }, [date, supabase])
+  }, [date, detectSchemaSupport, schemaSupport, supabase])
+
+  useEffect(() => { fetchTasks() }, [fetchTasks])
 
   function updateTask(idx: number, patch: Partial<TaskItem>) {
     setTasks(prev => prev.map((t, i) => i === idx ? { ...t, ...patch } : t))
@@ -109,48 +155,126 @@ export default function StaffPage() {
   async function toggleDone(idx: number, completedBy: 'worker' | 'admin' = 'worker') {
     const task = tasks[idx]
     const v = task.schedule.vehicle
+    const support = schemaSupport ?? await detectSchemaSupport()
+    setSavingKey(`done:${task.schedule.id}`)
 
     if (task.done) {
       if (task.washRecordId) {
-        await db().from('wash_records').delete().eq('id', task.washRecordId)
+        const { error } = await db().from('wash_records').delete().eq('id', task.washRecordId)
+        if (error) {
+          alert('완료 취소 실패: ' + error.message)
+          setSavingKey(null)
+          return
+        }
       }
       updateTask(idx, { done: false, washRecordId: null, completedBy: null })
+      setSavingKey(null)
     } else {
-      const { data: rec } = await db()
+      if (support.scheduleAdminMemo) {
+        const { error: scheduleError } = await db()
+          .from('schedules')
+          .update({ admin_memo: task.adminNote.trim() || null })
+          .eq('id', task.schedule.id)
+
+        if (scheduleError) {
+          alert('작업지시 저장 실패: ' + scheduleError.message)
+          setSavingKey(null)
+          return
+        }
+      }
+
+      const payload: Record<string, unknown> = {
+        vehicle_id: v.id,
+        schedule_id: task.schedule.id,
+        wash_date: date,
+        price: v.unit_price ?? 0,
+        memo: task.memo.trim() || null,
+      }
+
+      if (support.washAdminNote) payload.admin_note = task.adminNote.trim() || null
+      if (support.washCompletedBy) payload.completed_by = completedBy
+
+      const { data: rec, error } = await db()
         .from('wash_records')
-        .insert({
-          vehicle_id:   v.id,
-          wash_date:    date,
-          price:        v.unit_price ?? 0,
-          memo:         task.memo.trim() || null,
-          admin_note:   task.adminNote.trim() || null,
-          completed_by: completedBy,
-        })
+        .insert(payload)
         .select()
         .single()
+
+      if (error) {
+        alert('완료 처리 실패: ' + error.message)
+        setSavingKey(null)
+        return
+      }
 
       if (rec) {
         updateTask(idx, { done: true, washRecordId: rec.id, completedBy, expanded: false })
       }
+      setSavingKey(null)
     }
   }
 
   async function saveAdminNote(idx: number) {
     const task = tasks[idx]
-    if (!task.washRecordId) {
-      // 완료 전이면 상태만 저장 (완료 시 DB 반영)
-      updateTask(idx, { editingAdminNote: false })
+    const support = schemaSupport ?? await detectSchemaSupport()
+    setSavingKey(`admin:${task.schedule.id}`)
+
+    if (!support.scheduleAdminMemo && !support.washAdminNote) {
+      alert('운영 DB에 관리자 작업지시 저장 컬럼이 없어 저장할 수 없습니다. DB 마이그레이션이 필요합니다.')
+      setSavingKey(null)
       return
     }
+
+    if (support.scheduleAdminMemo) {
+      const { error } = await db()
+        .from('schedules')
+        .update({ admin_memo: task.adminNote.trim() || null })
+        .eq('id', task.schedule.id)
+
+      if (error) {
+        alert('저장 실패: ' + error.message)
+        setSavingKey(null)
+        return
+      }
+    }
+
+    if (task.washRecordId && support.washAdminNote) {
+      const { error } = await db()
+        .from('wash_records')
+        .update({ admin_note: task.adminNote.trim() || null })
+        .eq('id', task.washRecordId)
+
+      if (error) {
+        alert('저장 실패: ' + error.message)
+        setSavingKey(null)
+        return
+      }
+    }
+
+    updateTask(idx, { editingAdminNote: false })
+    setSavingKey(null)
+  }
+
+  async function saveWorkerMemo(idx: number) {
+    const task = tasks[idx]
+
+    if (!task.washRecordId) {
+      alert('작업자 메모는 완료 처리 시 함께 저장됩니다.')
+      return
+    }
+
+    setSavingKey(`memo:${task.schedule.id}`)
     const { error } = await db()
       .from('wash_records')
-      .update({ admin_note: task.adminNote.trim() || null })
+      .update({ memo: task.memo.trim() || null })
       .eq('id', task.washRecordId)
+
     if (error) {
-      alert('저장 실패: ' + error.message)
+      alert('메모 저장 실패: ' + error.message)
+      setSavingKey(null)
       return
     }
-    updateTask(idx, { editingAdminNote: false })
+
+    setSavingKey(null)
   }
 
   async function uploadPhoto(idx: number, file: File) {
@@ -229,14 +353,22 @@ export default function StaffPage() {
           </div>
         ) : (
           <div className="space-y-3">
+            {schemaSupport && !schemaSupport.scheduleAdminMemo && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                관리자 작업지시 저장용 DB 컬럼이 아직 반영되지 않아, 현재는 완료 처리와 완료 후 작업자 메모 저장만 정상 동작합니다.
+              </div>
+            )}
             {tasks.map((task, idx) => (
               <TaskCard
                 key={task.schedule.id}
                 task={task}
+                isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
+                canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
                 onToggleWorker={() => toggleDone(idx, 'worker')}
                 onToggleAdmin={() => toggleDone(idx, 'admin')}
                 onCancel={() => toggleDone(idx)}
                 onMemoChange={v => updateTask(idx, { memo: v })}
+                onMemoSave={() => saveWorkerMemo(idx)}
                 onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
                 onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
                 onAdminNoteSave={() => saveAdminNote(idx)}
@@ -255,21 +387,24 @@ export default function StaffPage() {
 /* ─── 작업 카드 ─── */
 function TaskCard({
   task, onToggleWorker, onToggleAdmin, onCancel,
-  onMemoChange, onAdminNoteChange,
+  onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
-  onExpand, onPhotoUpload,
+  onExpand, onPhotoUpload, isSaving, canPersistAdminNote,
 }: {
   task: TaskItem
   onToggleWorker: () => void
   onToggleAdmin: () => void
   onCancel: () => void
   onMemoChange: (v: string) => void
+  onMemoSave: () => void
   onAdminNoteChange: (v: string) => void
   onAdminNoteEditStart: () => void
   onAdminNoteSave: () => void
   onAdminNoteCancel: () => void
   onExpand: () => void
   onPhotoUpload: (f: File) => void
+  isSaving: boolean
+  canPersistAdminNote: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const v = task.schedule.vehicle
@@ -336,6 +471,7 @@ function TaskCard({
               {!task.editingAdminNote && (
                 <button
                   onClick={onAdminNoteEditStart}
+                  disabled={!canPersistAdminNote}
                   className="text-xs text-red-600 hover:text-red-700"
                 >
                   {task.adminNote ? '수정' : '+ 작성'}
@@ -372,7 +508,9 @@ function TaskCard({
                 <p className="text-sm font-semibold text-red-800 whitespace-pre-wrap">{task.adminNote}</p>
               </div>
             ) : (
-              <p className="text-xs text-gray-300">작업지시 없음</p>
+              <p className="text-xs text-gray-300">
+                {canPersistAdminNote ? '작업지시 없음' : 'DB 업데이트 후 사용 가능'}
+              </p>
             )}
           </div>
 
@@ -386,6 +524,18 @@ function TaskCard({
               rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
+            <div className="mt-1 flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                {task.done ? '완료 후 메모 저장 가능' : '완료 처리 시 메모가 함께 저장됩니다'}
+              </p>
+              <button
+                onClick={onMemoSave}
+                disabled={!task.done || isSaving}
+                className="text-xs text-blue-600 disabled:text-gray-300"
+              >
+                저장
+              </button>
+            </div>
           </div>
 
           {/* 사진 업로드 */}
@@ -433,15 +583,17 @@ function TaskCard({
             <div className="flex gap-2">
               <button
                 onClick={onToggleWorker}
+                disabled={isSaving}
                 className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
               >
-                세차 완료 처리
+                  {isSaving ? '처리 중...' : '세차 완료 처리'}
               </button>
               <button
                 onClick={onToggleAdmin}
+                  disabled={isSaving}
                 className="flex-1 bg-gray-700 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-800 transition-colors"
               >
-                관리자 직접 완료
+                  {isSaving ? '처리 중...' : '관리자 직접 완료'}
               </button>
             </div>
           )}
@@ -449,10 +601,11 @@ function TaskCard({
           {task.done && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-green-600 font-medium">
-                ✓ {task.completedBy === 'admin' ? '관리자 직접 완료' : '작업자 완료'}
+                  ✓ {task.completedBy === 'admin' ? '관리자 직접 완료' : '작업자 완료'}
               </span>
               <button
                 onClick={onCancel}
+                  disabled={isSaving}
                 className="text-xs text-gray-400 hover:text-red-500 transition-colors"
               >
                 취소

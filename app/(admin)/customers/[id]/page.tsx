@@ -2,7 +2,7 @@
 
 // Design Ref: §5.2 — 고객 상세 + 차량 목록 + 상태 변경
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -36,9 +36,7 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading,  setLoading]  = useState(true)
 
-  useEffect(() => { fetchCustomer() }, [id])
-
-  async function fetchCustomer() {
+  const fetchCustomer = useCallback(async () => {
     const { data } = await supabase
       .from('customers')
       .select('*, vehicles(*)')
@@ -46,7 +44,9 @@ export default function CustomerDetailPage() {
       .single()
     if (data) setCustomer(data as Customer)
     setLoading(false)
-  }
+  }, [id, supabase])
+
+  useEffect(() => { fetchCustomer() }, [fetchCustomer])
 
   async function toggleVehicleStatus(vehicle: Vehicle) {
     const next: VehicleStatus = vehicle.status === 'active' ? 'paused' : 'active'

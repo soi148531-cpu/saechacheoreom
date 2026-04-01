@@ -38,14 +38,6 @@ export default function CalendarPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   )
 
-  useEffect(() => { fetchSchedules() }, [fetchSchedules])
-  useEffect(() => {
-    setShowAddForm(false)
-    setAddVehicleSearch('')
-    setReorderMode(false)
-    setManualOrder([])
-  }, [selectedDate])
-
   const fetchSchedules = useCallback(async () => {
     setLoading(true)
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
@@ -70,6 +62,14 @@ export default function CalendarPage() {
     setVehicles((vehicleData ?? []) as Vehicle[])
     setLoading(false)
   }, [year, month, supabase])
+
+  useEffect(() => { fetchSchedules() }, [fetchSchedules])
+  useEffect(() => {
+    setShowAddForm(false)
+    setAddVehicleSearch('')
+    setReorderMode(false)
+    setManualOrder([])
+  }, [selectedDate])
 
   const byDate = useMemo(() => {
     const map: Record<string, ScheduleWithVehicle[]> = {}

@@ -65,6 +65,7 @@ export interface WashRecord {
   completed_at: string | null
   memo: string | null
   admin_note: string | null
+  completed_by: 'worker' | 'admin' | null
   created_at: string
   vehicle?: Vehicle
   photos?: WashPhoto[]

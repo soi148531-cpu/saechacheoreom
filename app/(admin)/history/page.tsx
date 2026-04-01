@@ -44,7 +44,7 @@ export default function HistoryPage() {
 
     const { data: records } = await supabase
       .from('wash_records')
-      .select('*')
+      .select('*, completed_by')
       .eq('vehicle_id', vehicle.id)
       .order('wash_date', { ascending: false })
 
@@ -155,6 +155,16 @@ export default function HistoryPage() {
                               {r.memo && (
                                 <span className="text-xs text-gray-400 truncate max-w-[120px]">
                                   {r.memo}
+                                </span>
+                              )}
+                              {r.completed_by === 'admin' && (
+                                <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
+                                  관리자
+                                </span>
+                              )}
+                              {r.completed_by === 'worker' && (
+                                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                                  작업자
                                 </span>
                               )}
                             </div>
