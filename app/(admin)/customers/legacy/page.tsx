@@ -22,6 +22,7 @@ interface LegacyVehicleForm {
   monthly_count:  MonthlyCount
   start_date:     string
   end_date:       string
+  base_date:      string
   custom_price:   string
 }
 
@@ -33,6 +34,7 @@ const emptyVehicle = (): LegacyVehicleForm => ({
   monthly_count: 'monthly_2',
   start_date:    '',
   end_date:      '',
+  base_date:     '',
   custom_price:  '',
 })
 
@@ -85,6 +87,10 @@ export default function LegacyCustomerPage() {
       setError('서비스 시작일을 입력해주세요')
       return
     }
+    if (!vehicle.base_date) {
+      setError('신규 기준일을 입력해주세요')
+      return
+    }
     if (vehicle.end_date && vehicle.start_date >= vehicle.end_date) {
       setError('종료일은 시작일보다 이후여야 합니다')
       return
@@ -115,7 +121,7 @@ export default function LegacyCustomerPage() {
           customer_id:   customer.id,
           car_name:      vehicle.car_name.trim(),
           plate_number:  vehicle.plate_number.trim().replace(/\s/g, ''),
-          unit_number:   vehicle.unit_number.trim() || null,
+          unit_number:   vehicle.unit_number.trim() || '',
           car_grade:     vehicle.car_grade,
           monthly_count: vehicle.monthly_count,
           repeat_mode:   'date',
@@ -131,33 +137,22 @@ export default function LegacyCustomerPage() {
 
       if (vErr) throw vErr
 
-      // 3. 시작일 ~ 종료일 기간 내 일정 생성 (비정기 제외)
+      // 3. 신규 기준일 기준으로 1년치 일정 생성 (비정기 제외)
       if (vehicle.monthly_count !== 'onetime') {
-        const startDate = new Date(vehicle.start_date)
-        const endDateStr = vehicle.end_date
-        const endDate = endDateStr ? new Date(endDateStr) : new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate())
-        const monthsAhead = Math.max(1,
-          (endDate.getFullYear() - startDate.getFullYear()) * 12
-          + (endDate.getMonth() - startDate.getMonth())
-        )
+        const baseDate = new Date(vehicle.base_date)
 
         const allSchedules = generateSchedules(
           savedVehicle.id,
-          startDate,
+          baseDate,
           vehicle.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
           'date',
-          monthsAhead
+          12
         )
 
-        // 종료일이 있으면 그당일까지만 필터링
-        const filtered = endDateStr
-          ? allSchedules.filter(s => s.scheduled_date <= endDateStr)
-          : allSchedules
-
-        if (filtered.length > 0) {
+        if (allSchedules.length > 0) {
           const { error: schErr } = await supabase
             .from('schedules')
-            .insert(filtered.map(s => ({
+            .insert(allSchedules.map(s => ({
               vehicle_id:     s.vehicle_id,
               scheduled_date: s.scheduled_date,
               is_overcount:   s.is_overcount ?? false,
@@ -193,7 +188,7 @@ export default function LegacyCustomerPage() {
 
       {/* 안내 배너 */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 mb-5">
-        ◆ 기존 고객은 일정이 캘린더에 ◆ 기호로 표시됩니다. 종료일 입력 시 해당 기간만 일정 생성됩니다.
+        ◆ 기존 고객은 캘린더에 ◆ 기호로 표시됩니다. 신규 기준일부터 1년치 반복 일정이 자동 생성됩니다. 서비스 종료일은 기록용으로만 저장됩니다.
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -313,6 +308,19 @@ export default function LegacyCustomerPage() {
                 />
               </Field>
             </div>
+
+            {/* 신규 기준일 — 반복 일정 생성의 기준 날짜 */}
+            <Field label="신규 기준일 ✱" required>
+              <input
+                type="date"
+                value={vehicle.base_date}
+                onChange={e => updateVehicle('base_date', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <p className="text-xs text-gray-400 -mt-2">
+              이 날짜를 기준으로 반복 일정이 1년치 자동 생성됩니다
+            </p>
 
             {/* 월 가격 (직접 입력 가능) */}
             <Field label="월 가격 (선택 — 비우면 가격표 기준 자동 입력)">
