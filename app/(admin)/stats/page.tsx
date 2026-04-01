@@ -3,7 +3,7 @@
 // Design Ref: 통계 대시보드 — 월별 정기/정지/비정기 추이 + 매출 조회
 
 import { useEffect, useState, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/utils'
 import type { Vehicle } from '@/types'
