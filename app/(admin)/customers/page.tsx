@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Plus, Search, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, getUnitPrice } from '@/lib/constants/pricing'
+import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
 import type { Customer, VehicleStatus } from '@/types'
 

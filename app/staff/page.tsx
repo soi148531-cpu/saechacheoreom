@@ -3,7 +3,7 @@
 // Design Ref: §5.6 — 직원 작업 체크 페이지 (로그인 없이 URL 공유)
 // Plan SC: SC-04
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
@@ -34,9 +34,9 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true)
   const [date,    setDate]    = useState(today)
 
-  useEffect(() => { fetchTasks() }, [date])
+  useEffect(() => { fetchTasks() }, [fetchTasks])
 
-  async function fetchTasks() {
+  const fetchTasks = useCallback(async () => {
     setLoading(true)
 
     const { data: schedules, error } = await supabase
@@ -75,7 +75,7 @@ export default function StaffPage() {
       const record = recordRows.find(r => r.vehicle_id === s.vehicle_id)
       const vehiclePhotos = photoRows.filter(p => p.vehicle_id === s.vehicle_id).map(p => p.photo_url)
       return {
-        schedule:         s as any,
+        schedule:         s as ScheduleRow,
         done:             !!record,
         memo:             record?.memo ?? '',
         adminNote:        record?.admin_note ?? '',
@@ -90,8 +90,8 @@ export default function StaffPage() {
 
     // sort_order 기준 정렬
     items.sort((a, b) => {
-      const sa = (a.schedule as any).sort_order
-      const sb = (b.schedule as any).sort_order
+      const sa = a.schedule.sort_order
+      const sb = b.schedule.sort_order
       if (sa != null && sb != null) return sa - sb
       if (sa != null) return -1
       if (sb != null) return 1
@@ -100,7 +100,7 @@ export default function StaffPage() {
 
     setTasks(items)
     setLoading(false)
-  }
+  }, [date, supabase])
 
   function updateTask(idx: number, patch: Partial<TaskItem>) {
     setTasks(prev => prev.map((t, i) => i === idx ? { ...t, ...patch } : t))

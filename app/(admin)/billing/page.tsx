@@ -3,7 +3,7 @@
 // Design Ref: §5.3 — 청구 현황 (월별, POS식 정산)
 // Plan SC: SC-03 월말 정산 금액 자동 계산
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, X } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
@@ -11,7 +11,7 @@ import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
 import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus } from '@/types'
 
 interface BillingSummary {
-  vehicle:       Vehicle
+  vehicle:       Vehicle & { customer?: { name: string; phone: string | null } }
   records:       WashRecord[]
   extraItems:    BillingItem[]
   washTotal:     number
@@ -45,9 +45,7 @@ export default function BillingPage() {
   const [addingItem,  setAddingItem]  = useState<Record<string, NewItem>>({})
   const [showAddForm, setShowAddForm] = useState<string | null>(null)
 
-  useEffect(() => { fetchBilling() }, [yearMonth])
-
-  async function fetchBilling() {
+  const fetchBilling = useCallback(async () => {
     setLoading(true)
     const [y, m] = yearMonth.split('-')
     const startDate = `${y}-${m}-01`
@@ -94,7 +92,9 @@ export default function BillingPage() {
 
     setSummaries(Object.values(byVehicle))
     setLoading(false)
-  }
+  }, [yearMonth])
+
+  useEffect(() => { fetchBilling() }, [fetchBilling])
 
   function changeMonth(delta: number) {
     const [y, m] = yearMonth.split('-').map(Number)
@@ -228,10 +228,10 @@ export default function BillingPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold text-gray-900">{((s.vehicle as any).customer?.name) ?? '고객'}님</span>
-                      {((s.vehicle as any).customer?.phone) && (
+                      <span className="font-semibold text-gray-900">{s.vehicle.customer?.name ?? '고객'}님</span>
+                      {s.vehicle.customer?.phone && (
                         <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                          {((s.vehicle as any).customer?.phone)}
+                          {s.vehicle.customer.phone}
                         </span>
                       )}
                       <span className="font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded text-sm">

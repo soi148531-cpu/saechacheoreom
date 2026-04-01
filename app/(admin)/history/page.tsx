@@ -11,7 +11,7 @@ import { formatPrice } from '@/lib/utils'
 import type { Vehicle, WashRecord } from '@/types'
 
 interface HistoryResult {
-  vehicle: Vehicle
+  vehicle: Vehicle & { customer?: { name: string } }
   records: WashRecord[]
 }
 
@@ -40,7 +40,7 @@ export default function HistoryPage() {
       return
     }
 
-    const vehicle = vehicles[0] as Vehicle
+    const vehicle = vehicles[0] as Vehicle & { customer?: { name: string } }
 
     const { data: records } = await supabase
       .from('wash_records')
@@ -103,7 +103,7 @@ export default function HistoryPage() {
               </span>
             </div>
             <div className="text-sm text-gray-600 space-y-0.5">
-              <p>{(result.vehicle as any).customer?.name} · {result.vehicle.unit_number}</p>
+              <p>{result.vehicle.customer?.name} · {result.vehicle.unit_number}</p>
               <p>
                 {CAR_GRADE_LABELS[result.vehicle.car_grade]} ·{' '}
                 {MONTHLY_COUNT_LABELS[result.vehicle.monthly_count]}

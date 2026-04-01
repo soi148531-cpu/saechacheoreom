@@ -10,7 +10,7 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { db } from '@/lib/supabase/client'
 import {
   CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS,
-  getMonthlyPrice, getUnitPrice,
+  getMonthlyPrice,
 } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
 import {
@@ -18,9 +18,6 @@ import {
   type RepeatMode,
 } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount } from '@/types'
-
-const CAR_GRADES   = Object.keys(CAR_GRADE_LABELS) as CarGrade[]
-const MONTHLY_COUNTS = Object.keys(MONTHLY_COUNT_LABELS) as MonthlyCount[]
 
 interface VehicleForm {
   car_name:      string
@@ -103,7 +100,9 @@ export default function NewCustomerPage() {
         const monthly_price = v.monthly_count === 'onetime'
           ? null
           : getMonthlyPrice(v.car_grade, v.monthly_count)
-        const unit_price = getUnitPrice(v.car_grade, v.monthly_count)
+        const unit_price = v.monthly_count === 'onetime'
+          ? 0
+          : getMonthlyPrice(v.car_grade, v.monthly_count) / (v.monthly_count === 'monthly_1' ? 1 : v.monthly_count === 'monthly_2' ? 2 : 4)
         const status     = v.monthly_count === 'onetime' ? 'irregular' : 'active'
 
         const { data: vehicle, error: vErr } = await supabase
@@ -258,7 +257,9 @@ function VehicleCard({
   onRemove: (i: number) => void
   showRemove: boolean
 }) {
-  const unitPrice    = getUnitPrice(v.car_grade, v.monthly_count)
+  const unitPrice    = v.monthly_count === 'onetime'
+    ? 0
+    : getMonthlyPrice(v.car_grade, v.monthly_count) / (v.monthly_count === 'monthly_1' ? 1 : v.monthly_count === 'monthly_2' ? 2 : 4)
   const monthlyPrice = v.monthly_count !== 'onetime'
     ? getMonthlyPrice(v.car_grade, v.monthly_count) : null
 

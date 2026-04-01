@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical } from 'lucide-react'
 import { DndContext, closestCenter, type DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
@@ -38,7 +38,7 @@ export default function CalendarPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   )
 
-  useEffect(() => { fetchSchedules() }, [year, month])
+  useEffect(() => { fetchSchedules() }, [fetchSchedules])
   useEffect(() => {
     setShowAddForm(false)
     setAddVehicleSearch('')
@@ -46,7 +46,7 @@ export default function CalendarPage() {
     setManualOrder([])
   }, [selectedDate])
 
-  async function fetchSchedules() {
+  const fetchSchedules = useCallback(async () => {
     setLoading(true)
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const lastDay   = new Date(year, month + 1, 0).getDate()
@@ -69,7 +69,7 @@ export default function CalendarPage() {
     setSchedules((scheduleData ?? []) as ScheduleWithVehicle[])
     setVehicles((vehicleData ?? []) as Vehicle[])
     setLoading(false)
-  }
+  }, [year, month, supabase])
 
   const byDate = useMemo(() => {
     const map: Record<string, ScheduleWithVehicle[]> = {}
@@ -261,7 +261,7 @@ export default function CalendarPage() {
         {searchQuery.trim() && (
           <div className="max-w-2xl mx-auto mt-1.5">
             <p className="text-xs text-blue-600">
-              "{searchQuery}" — {searchHighlights.size}개 날짜 하이라이트
+              {'"'}{searchQuery}{'"'} — {searchHighlights.size}개 날짜 하이라이트
             </p>
           </div>
         )}
