@@ -24,6 +24,7 @@ interface LegacyVehicleForm {
   end_date:       string
   base_date:      string
   custom_price:   string
+  interior_count: number
 }
 
 const emptyVehicle = (): LegacyVehicleForm => ({
@@ -36,6 +37,7 @@ const emptyVehicle = (): LegacyVehicleForm => ({
   end_date:      '',
   base_date:     '',
   custom_price:  '',
+  interior_count: 0,
 })
 
 function getMonthlyPriceForGrade(grade: string, monthlyCount: string): number {
@@ -131,6 +133,7 @@ export default function LegacyCustomerPage() {
           end_date:      vehicle.end_date || null,
           status:        vehicle.monthly_count === 'onetime' ? 'irregular' : 'active',
           is_legacy:     true,
+          interior_count: vehicle.interior_count,
         })
         .select()
         .single()
@@ -342,6 +345,34 @@ export default function LegacyCustomerPage() {
               <div className="text-gray-600 mt-0.5">
                 1회 단가: <span className="font-semibold text-blue-700">{formatPrice(unitPrice)}</span>
               </div>
+            </div>
+
+            {/* 실내 세차 횟수 (월1) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                실내 세차 (월1)
+              </label>
+              <div className="flex gap-2">
+                {[0, 1, 2, 3, 4].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setVehicle(prev => ({ ...prev, interior_count: n }))}
+                    className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      vehicle.interior_count === n
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
+                    }`}
+                  >
+                    {n === 0 ? '없음' : `${n}회`}
+                  </button>
+                ))}
+              </div>
+              {vehicle.interior_count > 0 && (
+                <p className="mt-1.5 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5">
+                  쾘린더에 &lt;실내{vehicle.interior_count}회&gt; 표시 — 관리자가 월초에 수동 체크
+                </p>
+              )}
             </div>
           </div>
         </section>

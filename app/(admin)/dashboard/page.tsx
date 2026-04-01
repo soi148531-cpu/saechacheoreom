@@ -565,6 +565,12 @@ function ScheduleRow({
                 실내
               </span>
             )}
+            {!schedule.has_interior && (v?.interior_count ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5 text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-medium border border-green-200">
+                <Sofa size={10} />
+                실내{v!.interior_count}회
+              </span>
+            )}
           </div>
 
           {/* 고객명 + 동호수 + 아파트 */}

@@ -37,6 +37,7 @@ export interface Vehicle {
   start_date: string
   end_date: string | null
   status: VehicleStatus
+  interior_count: number | null
   is_legacy: boolean | null
   created_at: string
   customer?: Customer

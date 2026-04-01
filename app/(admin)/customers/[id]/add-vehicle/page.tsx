@@ -25,6 +25,7 @@ interface VehicleForm {
   monthly_count: MonthlyCount
   repeat_mode:   RepeatMode
   start_date:    string
+  interior_count: number
 }
 
 const emptyVehicle = (): VehicleForm => ({
@@ -35,6 +36,7 @@ const emptyVehicle = (): VehicleForm => ({
   monthly_count: 'monthly_2',
   repeat_mode:   'date',
   start_date:    new Date().toISOString().split('T')[0],
+  interior_count: 0,
 })
 
 const inputCls  = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -75,7 +77,10 @@ export default function AddVehiclePage() {
   useEffect(() => { fetchCustomer() }, [fetchCustomer])
 
   function updateVehicle(field: keyof VehicleForm, value: string) {
-    setVehicle(prev => ({ ...prev, [field]: value }))
+    setVehicle(prev => ({
+      ...prev,
+      [field]: field === 'interior_count' ? Number(value) : value
+    }))
   }
 
   const monthlyPrice = vehicle.monthly_count !== 'onetime'
@@ -116,6 +121,7 @@ export default function AddVehiclePage() {
           monthly_price: monthlyPrice ?? null,
           unit_price:    unitPrice || null,
           start_date:    vehicle.start_date,
+          interior_count: vehicle.interior_count,
           status,
         })
         .select()
@@ -285,6 +291,34 @@ export default function AddVehiclePage() {
               <div className="text-gray-600 mt-0.5">
                 1회 단가: <span className="font-semibold text-blue-700">{formatPrice(unitPrice)}</span>
               </div>
+            </div>
+
+            {/* 실내 세차 횟수 (월1) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                실내 세차 (월1)
+              </label>
+              <div className="flex gap-2">
+                {[0, 1, 2, 3, 4].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => updateVehicle('interior_count', String(n))}
+                    className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      vehicle.interior_count === n
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
+                    }`}
+                  >
+                    {n === 0 ? '없음' : `${n}회`}
+                  </button>
+                ))}
+              </div>
+              {vehicle.interior_count > 0 && (
+                <p className="mt-1.5 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5">
+                  쾘린더에 &lt;실내{vehicle.interior_count}회&gt; 표시 — 관리자가 월초에 수동 체크
+                </p>
+              )}
             </div>
           </div>
         </section>

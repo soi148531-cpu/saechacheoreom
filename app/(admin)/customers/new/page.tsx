@@ -27,6 +27,7 @@ interface VehicleForm {
   monthly_count: MonthlyCount
   repeat_mode:   RepeatMode   // 월1회 전용
   start_date:    string
+  interior_count: number
 }
 
 const emptyVehicle = (): VehicleForm => ({
@@ -37,6 +38,7 @@ const emptyVehicle = (): VehicleForm => ({
   monthly_count: 'monthly_2',
   repeat_mode:   'date',
   start_date:    new Date().toISOString().split('T')[0],
+  interior_count: 0,
 })
 
 export default function NewCustomerPage() {
@@ -57,7 +59,10 @@ export default function NewCustomerPage() {
 
   function updateVehicle(idx: number, field: keyof VehicleForm, value: string) {
     setVehicles(prev =>
-      prev.map((v, i) => i === idx ? { ...v, [field]: value } : v)
+      prev.map((v, i) => i === idx ? {
+        ...v,
+        [field]: field === 'interior_count' ? Number(value) : value
+      } : v)
     )
   }
 
@@ -118,6 +123,7 @@ export default function NewCustomerPage() {
             monthly_price,
             unit_price,
             start_date:    v.start_date,
+            interior_count: v.interior_count,
             status,
           })
           .select()
@@ -393,6 +399,34 @@ function VehicleCard({
           <div className="text-gray-600 mt-0.5">
             1회 단가: <span className="font-semibold text-blue-700">{formatPrice(unitPrice)}</span>
           </div>
+        </div>
+
+        {/* 실내 세차 횟수 (월1) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            실내 세차 (월1)
+          </label>
+          <div className="flex gap-2">
+            {[0, 1, 2, 3, 4].map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onUpdate(idx, 'interior_count', String(n))}
+                className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  v.interior_count === n
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
+                }`}
+              >
+                {n === 0 ? '없음' : `${n}회`}
+              </button>
+            ))}
+          </div>
+          {v.interior_count > 0 && (
+            <p className="mt-1.5 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5">
+              쾘린더에 &lt;실내{v.interior_count}회&gt; 표시 — 관리자가 월초에 수동 체크
+            </p>
+          )}
         </div>
       </div>
     </section>
