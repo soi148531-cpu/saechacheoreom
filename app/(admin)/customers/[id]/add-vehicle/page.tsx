@@ -25,6 +25,8 @@ interface VehicleForm {
   monthly_count: MonthlyCount
   repeat_mode:   RepeatMode
   start_date:    string
+  end_date:      string
+  base_date:     string
   interior_count: number
 }
 
@@ -35,7 +37,9 @@ const emptyVehicle = (): VehicleForm => ({
   car_grade:     'mid_suv',
   monthly_count: 'monthly_2',
   repeat_mode:   'date',
-  start_date:    new Date().toISOString().split('T')[0],
+  start_date:    '',
+  end_date:      '',
+  base_date:     new Date().toISOString().split('T')[0],
   interior_count: 0,
 })
 
@@ -120,7 +124,8 @@ export default function AddVehiclePage() {
           repeat_mode:   vehicle.repeat_mode,
           monthly_price: monthlyPrice ?? null,
           unit_price:    unitPrice || null,
-          start_date:    vehicle.start_date,
+          start_date:    vehicle.start_date || vehicle.base_date,
+          end_date:      vehicle.end_date || null,
           interior_count: vehicle.interior_count,
           status,
         })
@@ -131,10 +136,10 @@ export default function AddVehiclePage() {
 
       // 일정 자동 생성 (비정기 제외)
       if (vehicle.monthly_count !== 'onetime') {
-        const startDate = new Date(vehicle.start_date)
+        const baseDate = new Date(vehicle.base_date)
         const schedules = generateSchedules(
           savedVehicle.id,
-          startDate,
+          baseDate,
           vehicle.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
           vehicle.repeat_mode,
           12
@@ -236,14 +241,38 @@ export default function AddVehiclePage() {
               </select>
             </Field>
 
-            <Field label="서비스 시작일" required>
+            {/* 서비스 시작일 / 종료일 */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="서비스 시작일">
+                <input
+                  type="date"
+                  value={vehicle.start_date}
+                  onChange={e => updateVehicle('start_date', e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="서비스 종료일">
+                <input
+                  type="date"
+                  value={vehicle.end_date}
+                  onChange={e => updateVehicle('end_date', e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            {/* 신규 기준일 — 반복 일정 생성 기준 */}
+            <Field label="신규 기준일 ✳" required>
               <input
                 type="date"
-                value={vehicle.start_date}
-                onChange={e => updateVehicle('start_date', e.target.value)}
+                value={vehicle.base_date}
+                onChange={e => updateVehicle('base_date', e.target.value)}
                 className={inputCls}
               />
             </Field>
+            <p className="text-xs text-gray-400 -mt-2">
+              이 날짜를 기준으로 반복 일정이 1년치 자동 생성됩니다
+            </p>
 
             {/* 월1회: 반복 방식 선택 */}
             {vehicle.monthly_count === 'monthly_1' && (

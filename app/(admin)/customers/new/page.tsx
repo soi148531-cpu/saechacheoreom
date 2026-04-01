@@ -27,6 +27,8 @@ interface VehicleForm {
   monthly_count: MonthlyCount
   repeat_mode:   RepeatMode   // 월1회 전용
   start_date:    string
+  end_date:      string
+  base_date:     string
   interior_count: number
 }
 
@@ -37,7 +39,9 @@ const emptyVehicle = (): VehicleForm => ({
   car_grade:     'mid_suv',
   monthly_count: 'monthly_2',
   repeat_mode:   'date',
-  start_date:    new Date().toISOString().split('T')[0],
+  start_date:    '',
+  end_date:      '',
+  base_date:     new Date().toISOString().split('T')[0],
   interior_count: 0,
 })
 
@@ -122,7 +126,8 @@ export default function NewCustomerPage() {
             repeat_mode:   v.repeat_mode,
             monthly_price,
             unit_price,
-            start_date:    v.start_date,
+            start_date:    v.start_date || v.base_date,
+            end_date:      v.end_date || null,
             interior_count: v.interior_count,
             status,
           })
@@ -133,10 +138,10 @@ export default function NewCustomerPage() {
 
         // 3. 일정 자동 생성 (비정기 제외)
         if (v.monthly_count !== 'onetime') {
-          const startDate = new Date(v.start_date)
+          const baseDate = new Date(v.base_date)
           const schedules = generateSchedules(
             vehicle.id,
-            startDate,
+            baseDate,
             v.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
             v.repeat_mode,
             12
@@ -342,14 +347,38 @@ function VehicleCard({
           </select>
         </Field>
 
-        <Field label="서비스 시작일">
+        {/* 서비스 시작일 / 종료일 */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="서비스 시작일">
+            <input
+              type="date"
+              value={v.start_date}
+              onChange={e => onUpdate(idx, 'start_date', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="서비스 종료일">
+            <input
+              type="date"
+              value={v.end_date}
+              onChange={e => onUpdate(idx, 'end_date', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+        </div>
+
+        {/* 신규 기준일 — 반복 일정 생성 기준 */}
+        <Field label="신규 기준일 ✱" required>
           <input
             type="date"
-            value={v.start_date}
-            onChange={e => onUpdate(idx, 'start_date', e.target.value)}
+            value={v.base_date}
+            onChange={e => onUpdate(idx, 'base_date', e.target.value)}
             className={inputCls}
           />
         </Field>
+        <p className="text-xs text-gray-400 -mt-2">
+          이 날짜를 기준으로 반복 일정이 1년치 자동 생성됩니다
+        </p>
 
         {/* 월1회: 반복 방식 선택 (네이버 캘린더 방식) */}
         {v.monthly_count === 'monthly_1' && (
