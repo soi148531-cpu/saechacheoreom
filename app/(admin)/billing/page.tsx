@@ -4,7 +4,7 @@
 // Plan SC: SC-03 월말 정산 금액 자동 계산
 
 import { useEffect, useState, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, X, Copy } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
@@ -171,6 +171,43 @@ export default function BillingPage() {
   const totalUnpaid = summaries.filter(s => s.paymentStatus !== 'paid').length
   const totalPaid   = summaries.filter(s => s.paymentStatus === 'paid').length
 
+  function buildKakaoMessage(s: BillingSummary): string {
+    const v = s.vehicle
+    const [, m] = yearMonth.split('-')
+    const lines: string[] = []
+    lines.push(`[새차처럼] ${parseInt(m)}월 세차 청구 안내`)
+    lines.push('━'.repeat(17))
+    lines.push(`고객명: ${v.customer?.name ?? ''} 님`)
+    lines.push(`차량: ${v.car_name} (${v.plate_number})`)
+    lines.push('━'.repeat(17))
+    s.records.forEach(r => {
+      const d = new Date(r.wash_date)
+      const basePrice   = v.unit_price ?? 0
+      const interiorAmt = r.price - basePrice
+      if (interiorAmt > 0) {
+        lines.push(`· ${parseInt(m)}/${d.getDate()} 세차: ${formatPrice(basePrice)} + 실내 ${formatPrice(interiorAmt)}`)
+      } else {
+        lines.push(`· ${parseInt(m)}/${d.getDate()} 세차: ${formatPrice(r.price)}`)
+      }
+    })
+    if (s.extraItems.length > 0) {
+      s.extraItems.forEach(item => {
+        lines.push(`· ${item.item_name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}: ${formatPrice(item.amount)}`)
+      })
+    }
+    lines.push('━'.repeat(17))
+    lines.push(`청구금액: ${formatPrice(s.totalAmount)}`)
+    lines.push('입금계좌: (계좌 정보)')
+    lines.push('━'.repeat(17))
+    return lines.join('\n')
+  }
+
+  async function copyKakao(s: BillingSummary) {
+    const msg = buildKakaoMessage(s)
+    await navigator.clipboard.writeText(msg)
+    alert('클립보드에 복사되었습니다. 카카오에 붙여넣기 하세요.')
+  }
+
   return (
     <div className="p-4 max-w-2xl mx-auto">
       {/* 헤더 */}
@@ -262,9 +299,18 @@ export default function BillingPage() {
                       <div className="space-y-1">
                         {s.records.map(r => {
                           const d = new Date(r.wash_date)
+                          const basePrice   = v.unit_price ?? 0
+                          const interiorAmt = r.price - basePrice
                           return (
                             <div key={r.id} className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">{d.getMonth()+1}월 {d.getDate()}일</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-gray-600">{d.getMonth()+1}월 {d.getDate()}일</span>
+                                {interiorAmt > 0 && (
+                                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                                    +실내 {formatPrice(interiorAmt)}
+                                  </span>
+                                )}
+                              </div>
                               <span className="font-medium text-gray-800">{formatPrice(r.price)}</span>
                             </div>
                           )
@@ -390,6 +436,15 @@ export default function BillingPage() {
                         </button>
                       ))}
                     </div>
+
+                    {/* ⑤ 카카오 메시지 복사 */}
+                    <button
+                      onClick={() => copyKakao(s)}
+                      className="w-full flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold py-2.5 rounded-lg text-sm transition-colors"
+                    >
+                      <Copy size={15} />
+                      카카오 청구 메시지 복사
+                    </button>
                   </div>
                 )}
               </div>
