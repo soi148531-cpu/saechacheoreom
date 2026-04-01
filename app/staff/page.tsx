@@ -18,6 +18,7 @@ interface TaskItem {
   done: boolean
   memo: string          // 작업자 메모
   adminNote: string     // 관리자 작업지시
+  completedBy: 'worker' | 'admin' | null
   photos: string[]
   uploading: boolean
   expanded: boolean
@@ -53,10 +54,10 @@ export default function StaffPage() {
     const { data: records } = vehicleIds.length > 0
       ? await supabase
           .from('wash_records')
-          .select('id, vehicle_id, memo, admin_note')
+          .select('id, vehicle_id, memo, admin_note, completed_by')
           .in('vehicle_id', vehicleIds)
           .eq('wash_date', date)
-      : { data: [] as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null }> }
+      : { data: [] as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null; completed_by: string | null }> }
 
     const { data: photos } = vehicleIds.length > 0
       ? await supabase
@@ -68,7 +69,7 @@ export default function StaffPage() {
       : { data: [] as Array<{ vehicle_id: string; photo_url: string }> }
 
     const photoRows  = (photos  ?? []) as Array<{ vehicle_id: string; photo_url: string }>
-    const recordRows = (records ?? []) as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null }>
+    const recordRows = (records ?? []) as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null; completed_by: string | null }>
 
     const items: TaskItem[] = rows.map(s => {
       const record = recordRows.find(r => r.vehicle_id === s.vehicle_id)
@@ -78,6 +79,7 @@ export default function StaffPage() {
         done:             !!record,
         memo:             record?.memo ?? '',
         adminNote:        record?.admin_note ?? '',
+        completedBy:      (record?.completed_by as 'worker' | 'admin' | null) ?? null,
         photos:           vehiclePhotos,
         uploading:        false,
         expanded:         !record,
@@ -104,7 +106,7 @@ export default function StaffPage() {
     setTasks(prev => prev.map((t, i) => i === idx ? { ...t, ...patch } : t))
   }
 
-  async function toggleDone(idx: number) {
+  async function toggleDone(idx: number, completedBy: 'worker' | 'admin' = 'worker') {
     const task = tasks[idx]
     const v = task.schedule.vehicle
 
@@ -112,22 +114,23 @@ export default function StaffPage() {
       if (task.washRecordId) {
         await db().from('wash_records').delete().eq('id', task.washRecordId)
       }
-      updateTask(idx, { done: false, washRecordId: null })
+      updateTask(idx, { done: false, washRecordId: null, completedBy: null })
     } else {
       const { data: rec } = await db()
         .from('wash_records')
         .insert({
-          vehicle_id: v.id,
-          wash_date:  date,
-          price:      v.unit_price ?? 0,
-          memo:       task.memo.trim() || null,
-          admin_note: task.adminNote.trim() || null,
+          vehicle_id:   v.id,
+          wash_date:    date,
+          price:        v.unit_price ?? 0,
+          memo:         task.memo.trim() || null,
+          admin_note:   task.adminNote.trim() || null,
+          completed_by: completedBy,
         })
         .select()
         .single()
 
       if (rec) {
-        updateTask(idx, { done: true, washRecordId: rec.id, expanded: false })
+        updateTask(idx, { done: true, washRecordId: rec.id, completedBy, expanded: false })
       }
     }
   }
@@ -230,7 +233,9 @@ export default function StaffPage() {
               <TaskCard
                 key={task.schedule.id}
                 task={task}
-                onToggle={() => toggleDone(idx)}
+                onToggleWorker={() => toggleDone(idx, 'worker')}
+                onToggleAdmin={() => toggleDone(idx, 'admin')}
+                onCancel={() => toggleDone(idx)}
                 onMemoChange={v => updateTask(idx, { memo: v })}
                 onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
                 onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
@@ -249,12 +254,15 @@ export default function StaffPage() {
 
 /* ─── 작업 카드 ─── */
 function TaskCard({
-  task, onToggle, onMemoChange, onAdminNoteChange,
+  task, onToggleWorker, onToggleAdmin, onCancel,
+  onMemoChange, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
   onExpand, onPhotoUpload,
 }: {
   task: TaskItem
-  onToggle: () => void
+  onToggleWorker: () => void
+  onToggleAdmin: () => void
+  onCancel: () => void
   onMemoChange: (v: string) => void
   onAdminNoteChange: (v: string) => void
   onAdminNoteEditStart: () => void
@@ -274,7 +282,7 @@ function TaskCard({
       {/* 요약 행 */}
       <div className="flex items-center gap-3 p-4">
         <button
-          onClick={onToggle}
+          onClick={task.done ? onCancel : onToggleWorker}
           className={`flex-shrink-0 transition-colors ${
             task.done ? 'text-green-500' : 'text-gray-300 hover:text-blue-400'
           }`}
@@ -296,8 +304,8 @@ function TaskCard({
               </span>
             )}
             {task.adminNote && (
-              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">
-                📋 지시
+              <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold animate-pulse">
+                ⚠️ 지시
               </span>
             )}
           </div>
@@ -324,11 +332,11 @@ function TaskCard({
           {/* 관리자 작업지시 */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs font-bold text-amber-700">📋 관리자 작업지시</p>
+              <p className="text-xs font-bold text-red-700">⚠️ 관리자 작업지시</p>
               {!task.editingAdminNote && (
                 <button
                   onClick={onAdminNoteEditStart}
-                  className="text-xs text-amber-600 hover:text-amber-700"
+                  className="text-xs text-red-600 hover:text-red-700"
                 >
                   {task.adminNote ? '수정' : '+ 작성'}
                 </button>
@@ -342,12 +350,12 @@ function TaskCard({
                   onChange={e => onAdminNoteChange(e.target.value)}
                   placeholder="관리자 작업지시 내용"
                   rows={2}
-                  className="flex-1 text-sm border border-amber-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50"
+                  className="flex-1 text-sm border-2 border-red-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-red-400 bg-red-50"
                 />
                 <div className="flex flex-col gap-1">
                   <button
                     onClick={onAdminNoteSave}
-                    className="text-white bg-amber-500 px-2 py-1 rounded hover:bg-amber-600"
+                    className="text-white bg-red-500 px-2 py-1 rounded hover:bg-red-600"
                   >
                     <Check size={13} />
                   </button>
@@ -360,8 +368,8 @@ function TaskCard({
                 </div>
               </div>
             ) : task.adminNote ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <p className="text-sm text-amber-800 whitespace-pre-wrap">{task.adminNote}</p>
+              <div className="bg-red-50 border-2 border-red-300 rounded-lg px-3 py-2">
+                <p className="text-sm font-semibold text-red-800 whitespace-pre-wrap">{task.adminNote}</p>
               </div>
             ) : (
               <p className="text-xs text-gray-300">작업지시 없음</p>
@@ -422,19 +430,29 @@ function TaskCard({
 
           {/* 완료 버튼 */}
           {!task.done && (
-            <button
-              onClick={onToggle}
-              className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
-            >
-              세차 완료 처리
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={onToggleWorker}
+                className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+              >
+                세차 완료 처리
+              </button>
+              <button
+                onClick={onToggleAdmin}
+                className="flex-1 bg-gray-700 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-800 transition-colors"
+              >
+                관리자 직접 완료
+              </button>
+            </div>
           )}
 
           {task.done && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-green-600 font-medium">✓ 완료 처리됨</span>
+              <span className="text-sm text-green-600 font-medium">
+                ✓ {task.completedBy === 'admin' ? '관리자 직접 완료' : '작업자 완료'}
+              </span>
               <button
-                onClick={onToggle}
+                onClick={onCancel}
                 className="text-xs text-gray-400 hover:text-red-500 transition-colors"
               >
                 취소
