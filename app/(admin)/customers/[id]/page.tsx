@@ -41,6 +41,7 @@ export default function CustomerDetailPage() {
   const [editName,    setEditName]    = useState('')
   const [editPhone,   setEditPhone]   = useState('')
   const [editApart,   setEditApart]   = useState('')
+  const [editUnitNumber, setEditUnitNumber] = useState('')
   const [editMemo,    setEditMemo]    = useState('')
   const [editSaving,  setEditSaving]  = useState(false)
   // 차량 편집 모드
@@ -69,6 +70,7 @@ export default function CustomerDetailPage() {
       setEditName((data as Customer).name)
       setEditPhone((data as Customer).phone ?? '')
       setEditApart((data as Customer).apartment)
+      setEditUnitNumber((data as Customer).unit_number ?? '')
       setEditMemo((data as Customer).memo ?? '')
     }
     setLoading(false)
@@ -80,10 +82,11 @@ export default function CustomerDetailPage() {
     if (!editName.trim() || !editApart.trim()) return
     setEditSaving(true)
     await db().from('customers').update({
-      name:      editName.trim(),
-      phone:     editPhone.trim() || null,
-      apartment: editApart.trim(),
-      memo:      editMemo.trim() || null,
+      name:        editName.trim(),
+      phone:       editPhone.trim() || null,
+      apartment:   editApart.trim(),
+      unit_number: editUnitNumber.trim() || null,
+      memo:        editMemo.trim() || null,
     }).eq('id', id)
     setEditSaving(false)
     setEditing(false)
@@ -242,6 +245,12 @@ export default function CustomerDetailPage() {
               value={editApart}
               onChange={e => setEditApart(e.target.value)}
               placeholder="아파트"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              value={editUnitNumber}
+              onChange={e => setEditUnitNumber(e.target.value)}
+              placeholder="동호수 (예: 101동 1201호)"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <textarea

@@ -419,13 +419,11 @@ export default function CalendarPage() {
                       >
                         <span className="font-medium text-gray-900">{v.car_name}</span>
                         <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
-                        {v.customer?.unit_number && (
-                          <span className="text-xs text-gray-400">{v.customer.unit_number}</span>
-                        )}
                         {v.customer?.apartment && (
                           <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
                             <Home size={10} />
                             {v.customer.apartment}
+                            {v.customer?.unit_number && ` · ${v.customer.unit_number}`}
                           </span>
                         )}
                       </button>
