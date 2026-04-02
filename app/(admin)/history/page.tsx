@@ -40,22 +40,22 @@ export default function HistoryPage() {
 
     const { data: customerByName } = await supabase
       .from('customers')
-      .select('id')
+      .select('*')
       .ilike('name', `%${q}%`)
       .limit(1)
 
     if (customerByName && customerByName.length > 0) {
-      customerId = customerByName[0].id
+      customerId = (customerByName[0] as Customer).id
     } else {
       // 번호판으로 차량 검색 → customer_id 추출
       const { data: vehicleByPlate } = await supabase
         .from('vehicles')
-        .select('customer_id')
+        .select('*')
         .ilike('plate_number', `%${q}%`)
         .limit(1)
 
       if (vehicleByPlate && vehicleByPlate.length > 0) {
-        customerId = vehicleByPlate[0].customer_id
+        customerId = (vehicleByPlate[0] as Vehicle).customer_id
       }
     }
 
