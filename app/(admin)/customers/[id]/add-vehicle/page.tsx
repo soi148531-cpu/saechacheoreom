@@ -12,7 +12,7 @@ import {
 } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
 import {
-  generateSchedules, getDateLabel, getWeekdayLabel,
+  generateSchedules, getDateLabel, getWeekdayLabel, parseLocalDate,
   type RepeatMode,
 } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount, Customer } from '@/types'
@@ -97,7 +97,7 @@ export default function AddVehiclePage() {
   const repeatPreview = useMemo(() => {
     if (vehicle.monthly_count !== 'monthly_1') return null
     if (!vehicle.base_date) return null
-    const d = new Date(vehicle.base_date)
+    const d = parseLocalDate(vehicle.base_date)
     return vehicle.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
   }, [vehicle.monthly_count, vehicle.repeat_mode, vehicle.base_date])
 
@@ -137,7 +137,7 @@ export default function AddVehiclePage() {
 
       // 일정 자동 생성 (비정기 제외)
       if (vehicle.monthly_count !== 'onetime') {
-        const baseDate = new Date(vehicle.base_date)
+        const baseDate = parseLocalDate(vehicle.base_date)
         const schedules = generateSchedules(
           savedVehicle.id,
           baseDate,

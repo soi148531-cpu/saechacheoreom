@@ -14,7 +14,7 @@ import {
 } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
 import {
-  generateSchedules, getDateLabel, getWeekdayLabel,
+  generateSchedules, getDateLabel, getWeekdayLabel, parseLocalDate,
   type RepeatMode,
 } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount } from '@/types'
@@ -138,7 +138,7 @@ export default function NewCustomerPage() {
 
         // 3. 일정 자동 생성 (비정기 제외)
         if (v.monthly_count !== 'onetime') {
-          const baseDate = new Date(v.base_date)
+          const baseDate = parseLocalDate(v.base_date)
           const schedules = generateSchedules(
             vehicle.id,
             baseDate,
@@ -278,7 +278,7 @@ function VehicleCard({
   const repeatPreview = useMemo(() => {
     if (v.monthly_count !== 'monthly_1') return null
     if (!v.base_date) return null
-    const d = new Date(v.base_date)
+    const d = parseLocalDate(v.base_date)
     return v.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
   }, [v.monthly_count, v.repeat_mode, v.base_date])
 

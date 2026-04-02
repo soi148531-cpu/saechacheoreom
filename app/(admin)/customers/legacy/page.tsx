@@ -11,7 +11,7 @@ import {
   CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, MONTHLY_PRICE_TABLE, ONETIME_PRICE_TABLE,
 } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
-import { generateSchedules } from '@/lib/schedule/generator'
+import { generateSchedules, parseLocalDate } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount } from '@/types'
 
 interface LegacyVehicleForm {
@@ -142,7 +142,7 @@ export default function LegacyCustomerPage() {
 
       // 3. 신규 기준일 기준으로 1년치 일정 생성 (비정기 제외)
       if (vehicle.monthly_count !== 'onetime') {
-        const baseDate = new Date(vehicle.base_date)
+        const baseDate = parseLocalDate(vehicle.base_date)
 
         const allSchedules = generateSchedules(
           savedVehicle.id,
