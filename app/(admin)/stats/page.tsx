@@ -51,7 +51,7 @@ function BarChart({ data }: { data: Bar[] }) {
               key={i}
               className="flex-1 flex flex-col items-center justify-end"
               style={{ height: '100%' }}
-              title={`${d.label}: ${d.count}건 / ${formatPrice(d.revenue)}원`}
+              title={`${d.label}: ${d.count}건 / ${formatPrice(d.revenue)}`}
             >
               <div
                 className={`w-full rounded-t-sm transition-all ${d.count > 0 ? 'bg-orange-300 hover:bg-orange-400' : 'bg-gray-100'}`}
@@ -206,7 +206,7 @@ export default function StatsPage() {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">매출 지표</p>
               <div>
                 <p className="text-xs text-gray-400">매출 합계</p>
-                <p className="text-lg font-bold text-gray-900">{formatPrice(totalRevenue)}원</p>
+                <p className="text-lg font-bold text-gray-900">{formatPrice(totalRevenue)}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 rounded-lg p-2">
@@ -215,7 +215,7 @@ export default function StatsPage() {
                 </div>
                 <div className="bg-gray-50 rounded-lg p-2">
                   <p className="text-xs text-gray-400">건당 평균</p>
-                  <p className="text-base font-bold text-gray-800">{formatPrice(avgPerWash)}원</p>
+                  <p className="text-base font-bold text-gray-800">{formatPrice(avgPerWash)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -273,11 +273,11 @@ export default function StatsPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs text-gray-400">예상 매출</p>
-                <p className="font-semibold text-gray-700">{formatPrice(expectedRevenue)}원</p>
+                <p className="font-semibold text-gray-700">{formatPrice(expectedRevenue)}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400">실제 매출</p>
-                <p className="font-semibold text-gray-700">{formatPrice(monthActual)}원</p>
+                <p className="font-semibold text-gray-700">{formatPrice(monthActual)}</p>
               </div>
             </div>
           </div>

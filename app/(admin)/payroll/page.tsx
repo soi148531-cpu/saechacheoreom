@@ -260,16 +260,16 @@ export default function PayrollPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">
                   실외 세차 <span className="font-semibold text-gray-900">{exteriorCount}건</span>
-                  <span className="text-xs text-gray-400 ml-1"> {formatPrice(rates.exterior)}원</span>
+                  <span className="text-xs text-gray-400 ml-1"> {formatPrice(rates.exterior)}</span>
                 </span>
-                <span className="text-sm font-semibold text-gray-900">{formatPrice(exteriorPay)}원</span>
+                <span className="text-sm font-semibold text-gray-900">{formatPrice(exteriorPay)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">
                   실내 세차 <span className="font-semibold text-gray-900">{interiorCount}건</span>
-                  <span className="text-xs text-gray-400 ml-1"> {formatPrice(rates.interior)}원</span>
+                  <span className="text-xs text-gray-400 ml-1"> {formatPrice(rates.interior)}</span>
                 </span>
-                <span className="text-sm font-semibold text-gray-900">{formatPrice(interiorPay)}원</span>
+                <span className="text-sm font-semibold text-gray-900">{formatPrice(interiorPay)}</span>
               </div>
             </div>
 
@@ -340,7 +340,7 @@ export default function PayrollPage() {
                         <p className="text-sm font-medium text-gray-800">{item.description}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <p className="font-semibold text-blue-600">{formatPrice(item.amount)}원</p>
+                        <p className="font-semibold text-blue-600">{formatPrice(item.amount)}</p>
                         <button
                           onClick={() => deleteBonus(item.id)}
                           className="text-gray-400 hover:text-red-500 transition-colors"
@@ -358,14 +358,14 @@ export default function PayrollPage() {
               {bonusTotal > 0 && (
                 <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between">
                   <span className="text-xs text-gray-600 font-medium">보너스 소계</span>
-                  <span className="text-sm font-bold text-blue-600">{formatPrice(bonusTotal)}원</span>
+                  <span className="text-sm font-bold text-blue-600">{formatPrice(bonusTotal)}</span>
                 </div>
               )}
             </div>
 
             <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
               <span className="text-sm font-bold text-gray-700">총 인건비</span>
-              <span className="text-2xl font-bold text-blue-600">{formatPrice(totalPay)}원</span>
+              <span className="text-2xl font-bold text-blue-600">{formatPrice(totalPay)}</span>
             </div>
             <div className="mt-2 bg-gray-50 rounded-lg p-2 text-xs text-gray-500 text-center">
               총 작업 {records.length}건 (실외 {exteriorCount} + 실내 {interiorCount}) {bonusItems.length > 0 && `+ 보너스 ${bonusItems.length}건`}
@@ -410,9 +410,9 @@ export default function PayrollPage() {
                                 </span>
                               )}
                               <div className="text-right">
-                                <p className="text-xs text-gray-500">세차비 {formatPrice(r.price)}원</p>
+                                <p className="text-xs text-gray-500">세차비 {formatPrice(r.price)}</p>
                                 <p className="text-sm font-semibold text-blue-600">
-                                  +{formatPrice((interior ? rates.exterior + rates.interior : rates.exterior))}원
+                                  +{formatPrice((interior ? rates.exterior + rates.interior : rates.exterior))}
                                 </p>
                               </div>
                             </div>

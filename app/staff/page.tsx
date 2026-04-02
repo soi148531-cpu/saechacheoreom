@@ -201,6 +201,7 @@ export default function StaffPage() {
         schedule_id: task.schedule.id,
         wash_date: date,
         price: (v.unit_price ?? 0) + interiorPrice,
+        is_completed: true,
         memo: task.memo.trim() || null,
       }
 
