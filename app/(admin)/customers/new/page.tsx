@@ -22,7 +22,6 @@ import type { CarGrade, MonthlyCount } from '@/types'
 interface VehicleForm {
   car_name:      string
   plate_number:  string
-  unit_number:   string
   car_grade:     CarGrade
   monthly_count: MonthlyCount
   repeat_mode:   RepeatMode   // 월1회 전용
@@ -35,7 +34,6 @@ interface VehicleForm {
 const emptyVehicle = (): VehicleForm => ({
   car_name:      '',
   plate_number:  '',
-  unit_number:   '',
   car_grade:     'mid_suv',
   monthly_count: 'monthly_2',
   repeat_mode:   'date',
@@ -56,6 +54,7 @@ export default function NewCustomerPage() {
   const [name,      setName]      = useState('')
   const [phone,     setPhone]     = useState('')
   const [apartment, setApartment] = useState('')
+  const [unitNumber, setUnitNumber] = useState('')
   const [memo,      setMemo]      = useState('')
 
   // 차량 목록
@@ -92,10 +91,11 @@ export default function NewCustomerPage() {
       const { data: customer, error: custErr } = await supabase
         .from('customers')
         .insert({
-          name:      name.trim(),
-          phone:     phone.trim() || null,
-          apartment: apartment.trim(),
-          memo:      memo.trim() || null,
+          name:        name.trim(),
+          phone:       phone.trim() || null,
+          apartment:   apartment.trim(),
+          unit_number: unitNumber.trim() || null,
+          memo:        memo.trim() || null,
         })
         .select()
         .single()
@@ -120,7 +120,6 @@ export default function NewCustomerPage() {
             customer_id:   customer.id,
             car_name:      v.car_name.trim(),
             plate_number:  v.plate_number.trim().replace(/\s/g, ''),
-            unit_number:   v.unit_number.trim(),
             car_grade:     v.car_grade,
             monthly_count: v.monthly_count,
             repeat_mode:   v.repeat_mode,
@@ -208,6 +207,13 @@ export default function NewCustomerPage() {
                 placeholder="○○아파트"
                 className={inputCls}
                 required
+              />
+            </Field>
+            <Field label="동호수">
+              <input
+                value={unitNumber} onChange={e => setUnitNumber(e.target.value)}
+                placeholder="101동 1201호"
+                className={inputCls}
               />
             </Field>
             <Field label="메모">
@@ -314,15 +320,6 @@ function VehicleCard({
             />
           </Field>
         </div>
-
-        <Field label="동호수">
-          <input
-            value={v.unit_number}
-            onChange={e => onUpdate(idx, 'unit_number', e.target.value)}
-            placeholder="101동 1201호"
-            className={inputCls}
-          />
-        </Field>
 
         <Field label="차량등급">
           <select

@@ -188,8 +188,8 @@ export default function CalendarPage() {
       const aptA = a.vehicle?.customer?.apartment ?? ''
       const aptB = b.vehicle?.customer?.apartment ?? ''
       if (aptA !== aptB) return aptA.localeCompare(aptB, 'ko')
-      const unitA = a.vehicle?.unit_number ?? ''
-      const unitB = b.vehicle?.unit_number ?? ''
+      const unitA = a.vehicle?.customer?.unit_number ?? ''
+      const unitB = b.vehicle?.customer?.unit_number ?? ''
       return unitA.localeCompare(unitB, 'ko')
     })
   }, [selectedDate, byDate])
@@ -208,7 +208,7 @@ export default function CalendarPage() {
     return vehicles.filter(v =>
       v.plate_number?.toLowerCase().includes(q) ||
       v.car_name?.toLowerCase().includes(q) ||
-      v.unit_number?.toLowerCase().includes(q) ||
+      v.customer?.unit_number?.toLowerCase().includes(q) ||
       v.customer?.name?.toLowerCase().includes(q)
     ).slice(0, 10)
   }, [vehicles, addVehicleSearch])
@@ -419,7 +419,9 @@ export default function CalendarPage() {
                       >
                         <span className="font-medium text-gray-900">{v.car_name}</span>
                         <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
-                        <span className="text-xs text-gray-400">{v.unit_number}</span>
+                        {v.customer?.unit_number && (
+                          <span className="text-xs text-gray-400">{v.customer.unit_number}</span>
+                        )}
                         {v.customer?.apartment && (
                           <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
                             <Home size={10} />
@@ -581,7 +583,7 @@ function ScheduleRow({
           {/* 고객명 + 동호수 + 아파트 */}
           <p className="text-xs text-gray-400 mt-0.5">
             {v?.customer?.name}
-            {v?.unit_number && ` · ${v.unit_number}`}
+            {v?.customer?.unit_number && ` · ${v.customer.unit_number}`}
             {v?.customer?.apartment && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-blue-500">
                 <Home size={10} />

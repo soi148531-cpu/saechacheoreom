@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS customers (
   name        TEXT NOT NULL,
   phone       TEXT,
   apartment   TEXT NOT NULL DEFAULT '',
+  unit_number TEXT,
   memo        TEXT,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
@@ -19,7 +20,6 @@ CREATE TABLE IF NOT EXISTS vehicles (
   customer_id    UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   car_name       TEXT NOT NULL,
   plate_number   TEXT NOT NULL UNIQUE,
-  unit_number    TEXT NOT NULL DEFAULT '',
   car_grade      TEXT NOT NULL DEFAULT 'mid_suv',
   monthly_count  TEXT NOT NULL DEFAULT 'monthly_2',
   repeat_mode    TEXT NOT NULL DEFAULT 'date',

@@ -174,7 +174,9 @@ export default function HistoryPage() {
                       <span className="font-mono text-xs bg-white border border-gray-200 px-2 py-0.5 rounded text-blue-700">
                         {vehicle.plate_number}
                       </span>
-                      <span className="text-xs text-gray-500">{vehicle.unit_number}</span>
+                      {vehicle.customer?.unit_number && (
+                        <span className="text-xs text-gray-500">{vehicle.customer.unit_number}</span>
+                      )}
                       <span className="text-xs text-blue-600">
                         {CAR_GRADE_LABELS[vehicle.car_grade]} · {MONTHLY_COUNT_LABELS[vehicle.monthly_count]}
                         {vehicle.unit_price && ` · ${formatPrice(vehicle.unit_price)}/회`}

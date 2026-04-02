@@ -19,6 +19,7 @@ export interface Customer {
   name: string
   phone: string | null
   apartment: string
+  unit_number: string | null
   memo: string | null
   created_at: string
   vehicles?: Vehicle[]
@@ -29,7 +30,6 @@ export interface Vehicle {
   customer_id: string
   car_name: string
   plate_number: string
-  unit_number: string
   car_grade: CarGrade
   monthly_count: MonthlyCount
   monthly_price: number | null

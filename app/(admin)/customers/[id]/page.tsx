@@ -47,7 +47,6 @@ export default function CustomerDetailPage() {
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
   const [editVCarName,   setEditVCarName]   = useState('')
   const [editVPlate,     setEditVPlate]     = useState('')
-  const [editVUnit,      setEditVUnit]      = useState('')
   const [editVGrade,     setEditVGrade]     = useState<CarGrade>('mid_sedan')
   const [editVCount,     setEditVCount]     = useState<MonthlyCount>('monthly_1')
   const [editVUnitPrice, setEditVUnitPrice] = useState('')
@@ -95,7 +94,6 @@ export default function CustomerDetailPage() {
     setEditingVehicleId(v.id)
     setEditVCarName(v.car_name)
     setEditVPlate(v.plate_number)
-    setEditVUnit(v.unit_number)
     setEditVGrade(v.car_grade)
     setEditVCount(v.monthly_count)
     setEditVUnitPrice(v.unit_price?.toString() ?? '')
@@ -114,7 +112,6 @@ export default function CustomerDetailPage() {
     await db().from('vehicles').update({
       car_name:      editVCarName.trim(),
       plate_number:  editVPlate.trim().replace(/\s/g, ''),
-      unit_number:   editVUnit.trim(),
       car_grade:     editVGrade,
       monthly_count: editVCount,
       unit_price:    unitPrice,
@@ -330,10 +327,6 @@ export default function CustomerDetailPage() {
                       <input value={editVPlate} onChange={e => setEditVPlate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 block mb-1">동호수</label>
-                      <input value={editVUnit} onChange={e => setEditVUnit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
                       <label className="text-xs text-gray-500 block mb-1">차량등급</label>
                       <select value={editVGrade} onChange={e => setEditVGrade(e.target.value as CarGrade)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                         {(Object.entries(CAR_GRADE_LABELS) as [CarGrade, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -377,7 +370,6 @@ export default function CustomerDetailPage() {
                           {STATUS_LABELS[v.status]}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{v.unit_number}</p>
                     </div>
                     <div className="flex items-center gap-1.5 ml-2">
                       <button onClick={() => startEditVehicle(v)} className="text-blue-300 hover:text-blue-500">

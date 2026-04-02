@@ -483,7 +483,7 @@ function TaskCard({
             )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            {customer?.name} · {v.unit_number} · {CAR_GRADE_LABELS[v.car_grade]}
+            {customer?.name} · {customer?.unit_number} · {CAR_GRADE_LABELS[v.car_grade]}
             {customer?.apartment && (
               <span className="ml-1.5 inline-flex items-center gap-0.5 text-blue-500 font-medium">
                 <Home size={10} />

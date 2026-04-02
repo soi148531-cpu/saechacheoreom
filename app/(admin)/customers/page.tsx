@@ -170,7 +170,6 @@ export default function CustomersPage() {
                         <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono">
                           {v.plate_number}
                         </span>
-                        <span className="text-xs text-gray-400">{v.unit_number}</span>
                         <span className="text-xs text-blue-600">
                           {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
                         </span>
