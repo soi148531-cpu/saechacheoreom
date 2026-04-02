@@ -130,7 +130,7 @@ export default function CalendarPage() {
 
     const vehicleId = scheduleToDelete.vehicle_id
     const scheduledDate = scheduleToDelete.scheduled_date
-    const yearMonth = scheduledDate.slice(0, 7) // YYYY-MM 추출
+    const yearMonth = scheduledDate.slice(0, 7)
 
     // 같은 vehicle_id + 같은 year-month인 일정들 개수 세기
     const sameMonthSchedules = schedules.filter(
@@ -152,25 +152,29 @@ export default function CalendarPage() {
     // 일정 삭제
     await db().from('schedules').update({ is_deleted: true }).eq('id', scheduleId)
 
-    // 남은 일정들의 is_overcount 플래그 업데이트
-    const remainingSchedules = sameMonthSchedules.filter(s => s.id !== scheduleId)
-    if (remainingSchedules.length >= 2) {
-      // 남은 일정이 2개 이상이면 월3회 플래그 유지
-      for (const schedule of remainingSchedules) {
-        await db()
-          .from('schedules')
-          .update({ is_overcount: remainingSchedules.length >= 3 })
-          .eq('id', schedule.id)
-      }
-    } else {
-      // 남은 일정이 1개 이하면 is_overcount 제거
-      for (const schedule of remainingSchedules) {
-        await db()
-          .from('schedules')
-          .update({ is_overcount: false })
-          .eq('id', schedule.id)
-      }
-    }
+    // 삭제 후 남은 일정들 조회
+    const monthStart = `${yearMonth}-01`
+    const monthEnd = `${yearMonth}-${String(new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0).getDate()).padStart(2, '0')}`
+    
+    const { data: remainingInMonth } = await supabase
+      .from('schedules')
+      .select('id')
+      .eq('vehicle_id', vehicleId)
+      .gte('scheduled_date', monthStart)
+      .lte('scheduled_date', monthEnd)
+      .eq('is_deleted', false)
+
+    // 남은 일정이 3개 이상이면 is_overcount=true, 아니면 false로 모두 업데이트
+    const hasOvercount = (remainingInMonth?.length ?? 0) >= 3
+
+    // 같은 월의 모든 일정에서 is_overcount 플래그 업데이트
+    await db()
+      .from('schedules')
+      .update({ is_overcount: hasOvercount })
+      .eq('vehicle_id', vehicleId)
+      .gte('scheduled_date', monthStart)
+      .lte('scheduled_date', monthEnd)
+      .eq('is_deleted', false)
 
     fetchSchedules()
   }
