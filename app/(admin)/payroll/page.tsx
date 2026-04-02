@@ -83,7 +83,8 @@ export default function PayrollPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
+    const sb = createClient()
+    const { data } = await sb
       .from('wash_records')
       .select('*, vehicle:vehicles(*, customer:customers(*)), schedule:schedules(id, has_interior, scheduled_date)')
       .gte('wash_date', `${ymPrefix}-01`)
@@ -93,7 +94,7 @@ export default function PayrollPage() {
       .order('wash_date', { ascending: true })
     if (data) setRecords(data as PayrollRecord[])
     setLoading(false)
-  }, [supabase, ymPrefix])
+  }, [ymPrefix])
 
   useEffect(() => { fetchData() }, [fetchData])
 

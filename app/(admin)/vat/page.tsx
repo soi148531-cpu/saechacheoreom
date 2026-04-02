@@ -28,7 +28,8 @@ export default function VatPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
+    const sb = createClient()
+    const { data } = await sb
       .from('wash_records')
       .select('*, vehicle:vehicles(*, customer:customers(*))')
       .gte('wash_date', `${ymPrefix}-01`)
@@ -37,7 +38,7 @@ export default function VatPage() {
       .order('wash_date', { ascending: true })
     if (data) setRecords(data as VatRow[])
     setLoading(false)
-  }, [supabase, ymPrefix])
+  }, [ymPrefix])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -63,13 +64,14 @@ export default function VatPage() {
   }
 
   function buildTsv() {
+    const header = ['일자', '항목/내역', '', '', '공급대가(원)', '증빙종류', '비고'].join('\t')
     const rows = records.map(r => {
       const desc = getDescription(r)
       // A: 일자, B: 항목/내역, C: (병합), D: (병합), E: 공급대가, F: 증빙종류, G: 비고
       return [r.wash_date, desc, '', '', String(r.price), '간이영수증', r.memo ?? ''].join('\t')
     })
-    // 헤더 없이 데이터 행만 (스프레드시트에 그대로 붙여넣기)
-    return rows.join('\n')
+    // 헤더 포함 (스프레드시트에 A1부터 붙여넣기)
+    return [header, ...rows].join('\n')
   }
 
   async function copyToClipboard() {
