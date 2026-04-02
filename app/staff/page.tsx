@@ -4,7 +4,8 @@
 // Plan SC: SC-04
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X, Sofa } from 'lucide-react'
+import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X, Sofa, CalendarDays } from 'lucide-react'
+import Link from 'next/link'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
 import type { Vehicle, Schedule } from '@/types'
@@ -334,7 +335,15 @@ export default function StaffPage() {
             <h1 className="text-lg font-bold text-gray-900">직원 페이지</h1>
             <p className="text-xs text-gray-400">새차처럼 세차 서비스</p>
           </div>
-          <div className="text-right">
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors"
+            >
+              <CalendarDays size={14} />
+              캘린더
+            </Link>
+            <div className="text-right">
             <input
               type="date"
               value={date}
@@ -344,6 +353,7 @@ export default function StaffPage() {
             <p className="text-xs text-gray-500 mt-0.5">
               {completedCount} / {tasks.length} 완료
             </p>
+            </div>
           </div>
         </div>
         {tasks.length > 0 && (

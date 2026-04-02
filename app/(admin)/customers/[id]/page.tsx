@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Plus, Phone, Car, Calendar,
-  PauseCircle, PlayCircle, Trash2
+  PauseCircle, PlayCircle, Trash2, Pencil, Check, X
 } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
@@ -35,6 +35,13 @@ export default function CustomerDetailPage() {
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading,  setLoading]  = useState(true)
+  // 편집 모드
+  const [editing,     setEditing]     = useState(false)
+  const [editName,    setEditName]    = useState('')
+  const [editPhone,   setEditPhone]   = useState('')
+  const [editApart,   setEditApart]   = useState('')
+  const [editMemo,    setEditMemo]    = useState('')
+  const [editSaving,  setEditSaving]  = useState(false)
   // 서비스 정지: 어떤 차량이 정지 대기 중인지, 날짜 선택 값
   const [pausingId,   setPausingId]   = useState<string | null>(null)
   const [pauseDate,   setPauseDate]   = useState('')
@@ -46,11 +53,31 @@ export default function CustomerDetailPage() {
       .select('*, vehicles(*)')
       .eq('id', id)
       .single()
-    if (data) setCustomer(data as Customer)
+    if (data) {
+      setCustomer(data as Customer)
+      setEditName((data as Customer).name)
+      setEditPhone((data as Customer).phone ?? '')
+      setEditApart((data as Customer).apartment)
+      setEditMemo((data as Customer).memo ?? '')
+    }
     setLoading(false)
   }, [id, supabase])
 
   useEffect(() => { fetchCustomer() }, [fetchCustomer])
+
+  async function saveEdit() {
+    if (!editName.trim() || !editApart.trim()) return
+    setEditSaving(true)
+    await db().from('customers').update({
+      name:      editName.trim(),
+      phone:     editPhone.trim() || null,
+      apartment: editApart.trim(),
+      memo:      editMemo.trim() || null,
+    }).eq('id', id)
+    setEditSaving(false)
+    setEditing(false)
+    fetchCustomer()
+  }
 
   async function toggleVehicleStatus(vehicle: Vehicle) {
     if (vehicle.status === 'paused') {
@@ -107,6 +134,9 @@ export default function CustomerDetailPage() {
           <ArrowLeft size={22} />
         </button>
         <h1 className="text-xl font-bold text-gray-900 flex-1">{customer.name}</h1>
+        <button onClick={() => setEditing(true)} className="text-blue-400 hover:text-blue-600 p-1">
+          <Pencil size={17} />
+        </button>
         <button onClick={deleteCustomer} className="text-red-400 hover:text-red-600 p-1">
           <Trash2 size={18} />
         </button>
@@ -115,23 +145,68 @@ export default function CustomerDetailPage() {
       {/* 고객 정보 */}
       <section className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">고객 정보</h2>
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-gray-700">
-            <Car size={15} className="text-gray-400" />
-            <span>{customer.apartment}</span>
-          </div>
-          {customer.phone && (
-            <div className="flex items-center gap-2 text-gray-700">
-              <Phone size={15} className="text-gray-400" />
-              <a href={`tel:${customer.phone}`} className="text-blue-600">{customer.phone}</a>
+        {editing ? (
+          <div className="space-y-2">
+            <input
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              placeholder="고객명"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              value={editPhone}
+              onChange={e => setEditPhone(e.target.value)}
+              placeholder="연락처 (선택)"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              value={editApart}
+              onChange={e => setEditApart(e.target.value)}
+              placeholder="아파트"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <textarea
+              value={editMemo}
+              onChange={e => setEditMemo(e.target.value)}
+              placeholder="메모 (선택)"
+              rows={2}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={saveEdit}
+                disabled={editSaving}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Check size={14} />{editSaving ? '저장 중...' : '저장'}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200"
+              >
+                <X size={14} />취소
+              </button>
             </div>
-          )}
-          {customer.memo && (
-            <p className="text-gray-500 bg-gray-50 rounded-lg px-3 py-2 text-xs mt-2">
-              {customer.memo}
-            </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 text-gray-700">
+              <Car size={15} className="text-gray-400" />
+              <span>{customer.apartment}</span>
+            </div>
+            {customer.phone && (
+              <div className="flex items-center gap-2 text-gray-700">
+                <Phone size={15} className="text-gray-400" />
+                <a href={`tel:${customer.phone}`} className="text-blue-600">{customer.phone}</a>
+              </div>
+            )}
+            {customer.memo && (
+              <p className="text-gray-500 bg-gray-50 rounded-lg px-3 py-2 text-xs mt-2">
+                {customer.memo}
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* 차량 목록 */}
