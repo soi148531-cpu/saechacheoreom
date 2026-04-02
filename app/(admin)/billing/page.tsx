@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, X, Copy, Edit2, Save, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, Copy, Edit2, Save, Search } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
@@ -36,12 +36,6 @@ const STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string; icon:
   partial: { label: '부분납',   color: 'text-yellow-600 bg-yellow-50', icon: AlertCircle },
   unpaid:  { label: '미입금',   color: 'text-red-600 bg-red-50',      icon: Clock },
 }
-
-const PRESETS = [
-  { name: '실내청소',   price: INTERIOR_PRICE },
-  { name: '유리막코팅', price: 30000 },
-  { name: '타이어광택', price: 10000 },
-]
 
 export default function BillingPage() {
   const supabase = createClient()
@@ -93,12 +87,17 @@ export default function BillingPage() {
     const records = (rRes.data ?? []) as WashRecord[]
     const billings = (bRes.data ?? []) as Array<Billing & { items?: BillingItem[] }>
 
-    // 차량별 청구 정보 구성
+    // 차량별 청구 정보 구성 (종료/정지/세차없는 차량 제외)
     const vehicleBillings: Record<string, VehicleBilling> = {}
     vehicles.forEach(v => {
+      // 필터링: 종료된 차량, 정지중인 차량, 세차 실적 없는 차량 제외
+      if (v.end_date || v.status === 'paused') return
+      
+      const vehicleRecords = records.filter(r => r.vehicle_id === v.id)
+      if (vehicleRecords.length === 0) return
+      
       const billing = billings.find(b => b.vehicle_id === v.id)
       const extraItems = (billing?.items ?? []) as BillingItem[]
-      const vehicleRecords = records.filter(r => r.vehicle_id === v.id)
       const washTotal = vehicleRecords.reduce((s, r) => s + r.price, 0)
       const extraTotal = extraItems.reduce((s, i) => s + i.amount, 0)
       vehicleBillings[v.id] = {
@@ -114,7 +113,7 @@ export default function BillingPage() {
       }
     })
 
-    // 고객별로 그룹화
+    // 고객별로 그룹화 (세차 실적이 있는 차량만)
     const byCustomer: Record<string, CustomerBilling> = {}
     Object.values(vehicleBillings).forEach(vb => {
       const cid = vb.vehicle.customer_id
@@ -141,7 +140,7 @@ export default function BillingPage() {
     setLoading(false)
   }, [yearMonth])
 
-  useEffect(() => { fetchBilling() }, [fetchBilling])
+  useEffect(() => { fetchBilling() }, [fetchBilling, yearMonth])
 
   function changeMonth(delta: number) {
     const [y, m] = yearMonth.split('-').map(Number)
@@ -296,8 +295,8 @@ export default function BillingPage() {
   }
 
   const totalCustomers = filteredCustomers.length
-  const totalUnpaid = filteredCustomers.filter(c => c.paymentStatus !== 'paid').reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus !== 'paid').length, 0)
-  const totalPaid = filteredCustomers.filter(c => c.paymentStatus === 'paid').reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus === 'paid').length, 0)
+  const totalUnpaid = filteredCustomers.reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus !== 'paid').length, 0)
+  const totalPaid = filteredCustomers.reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus === 'paid').length, 0)
 
   return (
     <div className="p-4 max-w-3xl mx-auto pb-24">

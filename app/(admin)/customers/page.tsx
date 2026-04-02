@@ -3,7 +3,7 @@
 // Design Ref: §5.2 — 고객 관리 목록 (정기/정지/비정기/미등록 탭)
 // Plan SC: SC-01 오시오 기능 대체
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Plus, Search, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -26,11 +26,7 @@ export default function CustomersPage() {
   const [search, setSearch]       = useState('')
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchCustomers()
-  }, [])
-
-  async function fetchCustomers() {
+  const fetchCustomers = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('customers')
@@ -39,7 +35,11 @@ export default function CustomersPage() {
 
     if (!error && data) setCustomers(data as Customer[])
     setLoading(false)
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchCustomers()
+  }, [fetchCustomers])
 
   // 탭 + 검색 필터
   const filtered = customers.filter(c => {
