@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, Copy, Edit2, Save, Search } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
-import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
+import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
 import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, Customer } from '@/types'
 
@@ -138,9 +138,10 @@ export default function BillingPage() {
       (a.customer.name ?? '').localeCompare(b.customer.name ?? '')
     ))
     setLoading(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yearMonth])
 
-  useEffect(() => { fetchBilling() }, [fetchBilling, yearMonth])
+  useEffect(() => { fetchBilling() }, [fetchBilling])
 
   function changeMonth(delta: number) {
     const [y, m] = yearMonth.split('-').map(Number)
