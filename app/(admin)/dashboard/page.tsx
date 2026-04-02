@@ -523,6 +523,7 @@ function ScheduleRow({
       setDone(!!data)
     }
     check()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.vehicle_id, selectedDate])
 
   async function saveDate() {

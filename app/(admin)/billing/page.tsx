@@ -121,7 +121,7 @@ export default function BillingPage() {
         const customer = vb.vehicle.customer
         byCustomer[cid] = {
           customerId: cid,
-          customer: customer || { id: cid, name: '고객', phone: null },
+          customer: (customer ?? { id: cid, name: '고객', phone: null, apartment: '', memo: null, created_at: '' }) as Customer,
           vehicles: [],
           totalAmount: 0,
           totalRecords: 0,
