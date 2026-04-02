@@ -116,7 +116,7 @@ export default function VatPage() {
       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4 flex items-center justify-between">
         <div>
           <p className="text-xs text-yellow-700 font-semibold">월공급대가</p>
-          <p className="text-2xl font-bold text-yellow-900">{formatPrice(totalSupply)}원</p>
+          <p className="text-2xl font-bold text-yellow-900">{formatPrice(totalSupply)}</p>
           <p className="text-xs text-yellow-600 mt-0.5">총 {records.length}건</p>
         </div>
         <button
@@ -178,9 +178,9 @@ export default function VatPage() {
           <div className="mt-3 bg-blue-50 rounded-xl p-3 text-xs text-blue-700 leading-relaxed">
             <p className="font-semibold mb-1">📋 구글 스프레드시트 붙여넣기 방법</p>
             <p>1. <strong>클립보드 복사</strong> 버튼 클릭</p>
-            <p>2. 스프레드시트에서 <strong>월별 시트  A2 셀</strong> 선택</p>
+            <p>2. 스프레드시트에서 <strong>월별 시트</strong> → <strong>A2 셀</strong> 선택</p>
             <p>3. <kbd className="bg-blue-100 px-1 rounded">Ctrl+Shift+V</kbd> (서식 없이 붙여넣기)</p>
-            <p className="mt-1 text-blue-500"> 데이터는 A(일자)B(항목/내역)E(공급대가)F(증빙종류)G(비고) 순서로 복사됩니다.</p>
+            <p className="mt-1 text-blue-500">데이터는 일자, 항목/내역, 공급대가, 증빙종류, 비고 순서로 복사됩니다.</p>
           </div>
         </>
       )}
