@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, FileText, Wallet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/utils'
 import type { Vehicle, WashRecord } from '@/types'
@@ -30,7 +31,8 @@ function monthlyDelta(vehicles: Vehicle[], year: number, month: number) {
   const prefix = ymPrefix(year, month)
   return {
     newCount:  vehicles.filter(v => v.start_date?.startsWith(prefix)).length,
-    exitCount: vehicles.filter(v => v.end_date?.startsWith(prefix)).length,
+    // 이탈 = end_date 있는 차량 기준 (서비스 정지(paused) 제외)
+    exitCount: vehicles.filter(v => v.end_date?.startsWith(prefix) && v.status !== 'paused').length,
   }
 }
 
@@ -278,6 +280,34 @@ export default function StatsPage() {
                 <p className="font-semibold text-gray-700">{formatPrice(monthActual)}원</p>
               </div>
             </div>
+          </div>
+
+          {/* 정산·신고 바로가기 (모바일용) */}
+          <div className="mt-4 grid grid-cols-2 gap-3 md:hidden">
+            <Link
+              href="/vat"
+              className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <div className="w-9 h-9 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <FileText size={18} className="text-yellow-700" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">부가세 신고</p>
+                <p className="text-xs text-gray-400">월별 세차 내역</p>
+              </div>
+            </Link>
+            <Link
+              href="/payroll"
+              className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Wallet size={18} className="text-blue-700" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">작업자 정산</p>
+                <p className="text-xs text-gray-400">직원 인건비</p>
+              </div>
+            </Link>
           </div>
         </>
       )}
