@@ -124,7 +124,54 @@ export default function CalendarPage() {
   }
 
   async function deleteSchedule(scheduleId: string) {
+    // 현재 삭제하려는 일정 정보 가져오기
+    const scheduleToDelete = schedules.find(s => s.id === scheduleId)
+    if (!scheduleToDelete) return
+
+    const vehicleId = scheduleToDelete.vehicle_id
+    const scheduledDate = scheduleToDelete.scheduled_date
+    const yearMonth = scheduledDate.slice(0, 7) // YYYY-MM 추출
+
+    // 같은 vehicle_id + 같은 year-month인 일정들 개수 세기
+    const sameMonthSchedules = schedules.filter(
+      s => s.vehicle_id === vehicleId && 
+           s.scheduled_date.slice(0, 7) === yearMonth &&
+           !s.is_deleted
+    )
+
+    // 월3회 이상 감지 시 경고
+    if (sameMonthSchedules.length >= 3) {
+      const confirmed = confirm(
+        `⚠️ 월 3회 이상 예약된 차량입니다.\n\n` +
+        `${sameMonthSchedules.map(s => s.scheduled_date).join(', ')} (총 ${sameMonthSchedules.length}건)\n\n` +
+        `${scheduledDate} 일정을 삭제하시겠습니까?`
+      )
+      if (!confirmed) return
+    }
+
+    // 일정 삭제
     await db().from('schedules').update({ is_deleted: true }).eq('id', scheduleId)
+
+    // 남은 일정들의 is_overcount 플래그 업데이트
+    const remainingSchedules = sameMonthSchedules.filter(s => s.id !== scheduleId)
+    if (remainingSchedules.length >= 2) {
+      // 남은 일정이 2개 이상이면 월3회 플래그 유지
+      for (const schedule of remainingSchedules) {
+        await db()
+          .from('schedules')
+          .update({ is_overcount: remainingSchedules.length >= 3 })
+          .eq('id', schedule.id)
+      }
+    } else {
+      // 남은 일정이 1개 이하면 is_overcount 제거
+      for (const schedule of remainingSchedules) {
+        await db()
+          .from('schedules')
+          .update({ is_overcount: false })
+          .eq('id', schedule.id)
+      }
+    }
+
     fetchSchedules()
   }
 
@@ -144,6 +191,8 @@ export default function CalendarPage() {
 
   async function addOnetimeSchedule(vehicleId: string) {
     if (!selectedDate) return
+    
+    // 새로운 일정 추가
     await db().from('schedules').insert({
       vehicle_id: vehicleId,
       scheduled_date: selectedDate,
@@ -151,6 +200,25 @@ export default function CalendarPage() {
       is_overcount: false,
       is_deleted: false,
     })
+
+    // 추가 후 해당 월의 같은 vehicle 일정들 세기
+    const yearMonth = selectedDate.slice(0, 7)
+    const monthStart = `${yearMonth}-01`
+    const monthEnd = `${yearMonth}-${String(new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0).getDate()).padStart(2, '0')}`
+    
+    const { data: monthSchedules } = await supabase
+      .from('schedules')
+      .select('id')
+      .eq('vehicle_id', vehicleId)
+      .gte('scheduled_date', monthStart)
+      .lte('scheduled_date', monthEnd)
+      .eq('is_deleted', false)
+
+    // 3개 이상이면 all schedule에 is_overcount = true
+    if (monthSchedules && monthSchedules.length >= 3) {
+      await db().from('schedules').update({ is_overcount: true }).eq('vehicle_id', vehicleId).gte('scheduled_date', monthStart).lte('scheduled_date', monthEnd).eq('is_deleted', false)
+    }
+
     setShowAddForm(false)
     setAddVehicleSearch('')
     fetchSchedules()
