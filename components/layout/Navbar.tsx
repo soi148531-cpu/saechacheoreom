@@ -52,27 +52,6 @@ export default function Navbar() {
             )
           })}
         </div>
-        {/* 정산·신고 서브 탭 (통계 이하 페이지 활성 시 표시) */}
-        {(pathname.startsWith('/vat') || pathname.startsWith('/payroll')) && (
-          <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50">
-            {extraNavItems.map(({ href, label, icon: Icon }) => {
-              const active = pathname.startsWith(href)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors',
-                    active ? 'text-blue-600 bg-blue-50' : 'text-gray-500'
-                  )}
-                >
-                  <Icon size={14} />
-                  {label}
-                </Link>
-              )
-            })}
-          </div>
-        )}
       </nav>
 
       {/* 사이드 네비게이션 (PC) */}
