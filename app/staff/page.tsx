@@ -12,7 +12,7 @@ import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleRow = Schedule & {
   admin_memo?: string | null
-  vehicle: Vehicle & { customer: { name: string; apartment: string } }
+  vehicle: Vehicle & { customer: { name: string; apartment: string; unit_number: string | null } }
 }
 
 type SchemaSupport = {
@@ -78,8 +78,8 @@ export default function StaffPage() {
     const support = schemaSupport ?? await detectSchemaSupport()
 
     const scheduleSelect = support.scheduleAdminMemo
-      ? '*, vehicle:vehicles(*, customer:customers(name, apartment)), admin_memo'
-      : '*, vehicle:vehicles(*, customer:customers(name, apartment))'
+      ? '*, vehicle:vehicles(*, customer:customers(name, apartment, unit_number)), admin_memo'
+      : '*, vehicle:vehicles(*, customer:customers(name, apartment, unit_number))'
 
     const washRecordColumns = ['id', 'vehicle_id', 'memo']
     if (support.washAdminNote) washRecordColumns.push('admin_note')
