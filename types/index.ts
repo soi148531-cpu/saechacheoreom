@@ -69,8 +69,11 @@ export interface WashRecord {
   memo: string | null
   admin_note: string | null
   completed_by: 'worker' | 'admin' | null
+  worker_id: string | null
+  worked_by: 'worker' | 'admin'
   created_at: string
   vehicle?: Vehicle
+  worker?: Worker
   photos?: WashPhoto[]
 }
 
@@ -114,4 +117,26 @@ export interface BillingItem {
   quantity: number
   amount: number
   created_at: string
+}
+
+export interface Worker {
+  id: string
+  name: string
+  phone: string | null
+  status: 'active' | 'inactive'
+  created_at: string
+}
+
+export interface WorkerPayroll {
+  id: string
+  worker_id: string
+  year_month: string
+  total_washes: number
+  total_amount: number
+  bonus_amount: number
+  paid_amount: number
+  paid_at: string | null
+  memo: string | null
+  created_at: string
+  worker?: Worker
 }
