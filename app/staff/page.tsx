@@ -26,6 +26,7 @@ interface TaskItem {
   memo: string          // 작업자 메모
   adminNote: string     // 관리자 작업지시
   completedBy: 'worker' | 'admin' | null
+  interiorDone: boolean // 실내 완료 여부 (직원이 결정)
   photos: string[]
   uploading: boolean
   expanded: boolean
@@ -118,12 +119,20 @@ export default function StaffPage() {
     const items: TaskItem[] = rows.map(s => {
       const record = recordRows.find(r => r.vehicle_id === s.vehicle_id)
       const vehiclePhotos = photoRows.filter(p => p.vehicle_id === s.vehicle_id).map(p => p.photo_url)
+      // 기존 완료 기록에서 실내 여부 복원: price > unit_price 면 실내 완료했던 것
+      const basePrice = (s.vehicle as ScheduleRow['vehicle']).unit_price ?? 0
+      const prevInteriorDone = record
+        ? (record as unknown as { price?: number }).price !== undefined
+          ? ((record as unknown as { price: number }).price - basePrice) > 0
+          : false
+        : s.has_interior  // 미완료면 실내有인 경우 기본 체크
       return {
         schedule:         s as ScheduleRow,
         done:             !!record,
         memo:             record?.memo ?? '',
         adminNote:        s.admin_memo ?? record?.admin_note ?? '',
         completedBy:      (record?.completed_by as 'worker' | 'admin' | null) ?? null,
+        interiorDone:     prevInteriorDone,
         photos:           vehiclePhotos,
         uploading:        false,
         expanded:         !record,
@@ -183,7 +192,7 @@ export default function StaffPage() {
         }
       }
 
-      const hasInterior = task.schedule.has_interior
+      const hasInterior = task.schedule.has_interior && task.interiorDone
       const interiorPrice = hasInterior ? INTERIOR_PRICE : 0
 
       const payload: Record<string, unknown> = {
@@ -370,6 +379,7 @@ export default function StaffPage() {
                 onToggleWorker={() => toggleDone(idx, 'worker')}
                 onToggleAdmin={() => toggleDone(idx, 'admin')}
                 onCancel={() => toggleDone(idx)}
+                onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
                 onMemoChange={v => updateTask(idx, { memo: v })}
                 onMemoSave={() => saveWorkerMemo(idx)}
                 onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
@@ -390,6 +400,7 @@ export default function StaffPage() {
 /* ─── 작업 카드 ─── */
 function TaskCard({
   task, onToggleWorker, onToggleAdmin, onCancel,
+  onInteriorToggle,
   onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
   onExpand, onPhotoUpload, isSaving, canPersistAdminNote,
@@ -398,6 +409,7 @@ function TaskCard({
   onToggleWorker: () => void
   onToggleAdmin: () => void
   onCancel: () => void
+  onInteriorToggle: () => void
   onMemoChange: (v: string) => void
   onMemoSave: () => void
   onAdminNoteChange: (v: string) => void
@@ -444,7 +456,7 @@ function TaskCard({
             {task.schedule.has_interior && (
               <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">
                 <Sofa size={10} />
-                실내 포함
+                실내有
               </span>
             )}
             {!task.schedule.has_interior && (v.interior_count ?? 0) > 0 && (
@@ -478,6 +490,29 @@ function TaskCard({
       {/* 상세 (펼침) */}
       {task.expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3">
+
+          {/* 🛋️ 실내 완료 체크 (has_interior=true 이고 미완료일 때만 표시) */}
+          {task.schedule.has_interior && !task.done && (
+            <button
+              onClick={onInteriorToggle}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-colors ${
+                task.interiorDone
+                  ? 'border-green-500 bg-green-50 text-green-700'
+                  : 'border-gray-200 bg-gray-50 text-gray-500'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                task.interiorDone ? 'border-green-500 bg-green-500' : 'border-gray-300 bg-white'
+              }`}>
+                {task.interiorDone && <Check size={12} className="text-white" />}
+              </div>
+              <Sofa size={16} />
+              <div className="text-left">
+                <p className="text-sm font-semibold">실내 완료</p>
+                <p className="text-xs opacity-70">{task.interiorDone ? `+실내 ${INTERIOR_PRICE.toLocaleString()}원 추가됩니다` : '체크 시 실내 10,000원 추가'}</p>
+              </div>
+            </button>
+          )}
 
           {/* 관리자 작업지시 */}
           <div>

@@ -566,7 +566,7 @@ function ScheduleRow({
             {schedule.has_interior && (
               <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
                 <Sofa size={10} />
-                실내
+                실내有
               </span>
             )}
             {!schedule.has_interior && (v?.interior_count ?? 0) > 0 && (
@@ -632,7 +632,7 @@ function ScheduleRow({
               }`}
             >
               <Sofa size={10} />
-              {schedule.has_interior ? '실내 ✓' : '실내 추가'}
+              {schedule.has_interior ? '실내有 ✓' : '실내有 추가'}
             </button>
           </div>
 

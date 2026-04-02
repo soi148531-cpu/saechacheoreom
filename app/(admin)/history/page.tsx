@@ -4,7 +4,7 @@
 // Plan SC: SC-01
 
 import { useState } from 'react'
-import { Search } from 'lucide-react'
+import { Search, Sofa } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
@@ -147,11 +147,18 @@ export default function HistoryPage() {
                         const d = new Date(r.wash_date)
                         return (
                           <div key={r.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-gray-500 w-12">
                                 {d.getMonth()+1}/{d.getDate()}
                               </span>
                               <span className="text-gray-700">세차 완료</span>
+                              {/* 실내 완료 여부: price > unit_price 면 실내 작업 했음 */}
+                              {result.vehicle.unit_price && r.price > result.vehicle.unit_price && (
+                                <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                                  <Sofa size={10} />
+                                  실내
+                                </span>
+                              )}
                               {r.memo && (
                                 <span className="text-xs text-gray-400 truncate max-w-[120px]">
                                   {r.memo}
