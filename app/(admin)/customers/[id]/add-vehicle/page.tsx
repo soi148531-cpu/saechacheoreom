@@ -143,7 +143,7 @@ export default function AddVehiclePage() {
           baseDate,
           vehicle.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
           vehicle.repeat_mode,
-          12
+          24
         )
 
         const { error: schErr } = await db()

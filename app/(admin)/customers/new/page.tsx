@@ -144,7 +144,7 @@ export default function NewCustomerPage() {
             baseDate,
             v.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
             v.repeat_mode,
-            12
+            24
           )
 
           const { error: schErr } = await supabase

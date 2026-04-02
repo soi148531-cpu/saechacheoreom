@@ -127,7 +127,7 @@ export function generateSchedules(
   startDate: Date,
   monthlyCount: 'monthly_1' | 'monthly_2' | 'monthly_4',
   repeatMode: RepeatMode = 'date',
-  monthsAhead = 12
+  monthsAhead = 24
 ): ScheduleItem[] {
   let schedules: ScheduleItem[]
 
