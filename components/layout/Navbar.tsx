@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Users, Receipt, History, CheckSquare, BarChart2, FileText, Wallet } from 'lucide-react'
+import { CalendarDays, Users, Receipt, History, CheckSquare, BarChart2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -11,12 +11,6 @@ const navItems = [
   { href: '/billing',    label: '청구현황',  icon: Receipt },
   { href: '/history',    label: '이력조회',  icon: History },
   { href: '/stats',      label: '통계',      icon: BarChart2 },
-]
-
-// 하단 네비 숨김 (PC 사이드바 전용) 추가 메뉴
-const extraNavItems = [
-  { href: '/vat',        label: '부가세신고', icon: FileText },
-  { href: '/payroll',    label: '작업자정산', icon: Wallet },
 ]
 
 export default function Navbar() {
@@ -84,27 +78,6 @@ export default function Navbar() {
       {/* 사이드 네비게이션 (PC) */}
       <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 pt-16 z-30">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors',
-                active
-                  ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600'
-                  : 'text-gray-600 hover:bg-gray-50'
-              )}
-            >
-              <Icon size={20} />
-              {label}
-            </Link>
-          )
-        })}
-        {/* 정산/신고 메뉴 구분선 */}
-        <div className="mx-4 my-2 border-t border-gray-100" />
-        <p className="px-4 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">정산·신고</p>
-        {extraNavItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
             <Link
