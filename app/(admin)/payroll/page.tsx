@@ -55,7 +55,6 @@ function saveBonus(yearMonth: string, items: BonusItem[]) {
 }
 
 export default function PayrollPage() {
-  const supabase = createClient()
   const today = new Date()
 
   const [year,           setYear]           = useState(today.getFullYear())

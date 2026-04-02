@@ -15,7 +15,6 @@ function padMonth(n: number) { return String(n + 1).padStart(2, '0') }
 const MONTHS_KR = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']
 
 export default function VatPage() {
-  const supabase = createClient()
   const today = new Date()
 
   const [year,    setYear]    = useState(today.getFullYear())
