@@ -274,12 +274,13 @@ function VehicleCard({
   const monthlyPrice = v.monthly_count !== 'onetime'
     ? getMonthlyPrice(v.car_grade, v.monthly_count) : null
 
-  // 반복 방식 레이블 미리보기
+  // 반복 방식 레이블 미리보기 (신규 기준일 기준)
   const repeatPreview = useMemo(() => {
     if (v.monthly_count !== 'monthly_1') return null
-    const d = new Date(v.start_date)
+    if (!v.base_date) return null
+    const d = new Date(v.base_date)
     return v.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
-  }, [v.monthly_count, v.repeat_mode, v.start_date])
+  }, [v.monthly_count, v.repeat_mode, v.base_date])
 
   return (
     <section className="bg-white rounded-xl border border-blue-100 p-4">

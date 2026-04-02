@@ -96,9 +96,10 @@ export default function AddVehiclePage() {
 
   const repeatPreview = useMemo(() => {
     if (vehicle.monthly_count !== 'monthly_1') return null
-    const d = new Date(vehicle.start_date)
+    if (!vehicle.base_date) return null
+    const d = new Date(vehicle.base_date)
     return vehicle.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
-  }, [vehicle.monthly_count, vehicle.repeat_mode, vehicle.start_date])
+  }, [vehicle.monthly_count, vehicle.repeat_mode, vehicle.base_date])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
