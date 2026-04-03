@@ -22,11 +22,11 @@ export default function WorkersPage() {
   const [newPhone, setNewPhone] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
 
-  // 직원 목록 조회
+  // 직원 목록 조회 (모든 직원 포함)
   const fetchWorkers = async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/workers')
+      const res = await fetch('/api/workers?includeInactive=true')
       if (!res.ok) throw new Error('직원 목록 조회 실패')
       const json = await res.json()
       setWorkers(Array.isArray(json) ? json : json.data || [])

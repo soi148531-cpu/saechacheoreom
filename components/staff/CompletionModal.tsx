@@ -54,14 +54,16 @@ export default function CompletionModal({
     setCompletedAt(`${hours}:${minutes}`)
   }, [])
 
-  // 직원 목록 불러오기
+  // 직원 목록 불러오기 (활성 직원만)
   useEffect(() => {
     const fetchWorkers = async () => {
       try {
         const res = await fetch('/api/workers')
         if (!res.ok) return
         const json = await res.json()
-        const data = (json.data || json) as Worker[]
+        let data = (json.data || json) as Worker[]
+        // 중복 제거 (ID 기준)
+        data = Array.from(new Map(data.map(w => [w.id, w])).values())
         setWorkers(data)
         if (data.length > 0 && !selectedWorker) {
           setSelectedWorker(data[0].id)

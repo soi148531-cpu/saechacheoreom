@@ -6,20 +6,30 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
-// GET: 활성 직원 목록 조회 (완료 처리 용)
-export async function GET() {
+// GET: 직원 목록 조회 (활성만 또는 모두)
+export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url)
+    const includeInactive = searchParams.get('includeInactive') === 'true'
+    
+    let query = supabase
       .from('workers')
       .select('id, name, phone, status')
-      .eq('status', 'active')
       .order('name', { ascending: true })
+
+    if (!includeInactive) {
+      query = query.eq('status', 'active')
+    }
+
+    const { data, error } = await query
 
     if (error) {
       return Response.json({ success: false, message: error.message }, { status: 500 })
     }
 
-    return Response.json({ success: true, data })
+    // 중복 제거
+    const uniqueData = Array.from(new Map(data.map(w => [w.id, w])).values())
+    return Response.json({ success: true, data: uniqueData })
   } catch (err) {
     return Response.json(
       { success: false, message: err instanceof Error ? err.message : 'Unknown error' },
