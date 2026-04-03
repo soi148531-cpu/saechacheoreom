@@ -38,7 +38,7 @@ export default function CompletionModal({
   onSuccess,
 }: CompletionModalProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
-  const [workerOption, setWorkerOption] = useState<'me' | 'other' | 'admin'>('me')
+  const [workerOption, setWorkerOption] = useState<'me' | 'other'>('me')
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null)
   const [completedAt, setCompletedAt] = useState('')
   const [hasInterior, setHasInterior] = useState(false)
@@ -90,7 +90,7 @@ export default function CompletionModal({
       const finalPrice = calculatePrice()
       
       let workerId: string | null = null
-      let workedBy: 'worker' | 'admin' = 'admin'
+      let workedBy: 'worker' | 'admin' = 'worker'
 
       if (workerOption === 'other' && selectedWorker) {
         workerId = selectedWorker
@@ -99,7 +99,7 @@ export default function CompletionModal({
         // "나" 옵션은 현재 로그인 워커가 필요하지만, 미구현
         // 현재는 첫 번째 워커 기본값
         workerId = workers[0]?.id || null
-        workedBy = workedBy || 'worker'
+        workedBy = 'worker'
       }
 
       const dateStr = new Date().toISOString().split('T')[0]
@@ -192,16 +192,6 @@ export default function CompletionModal({
                   className="mr-2"
                 />
                 <span className="text-sm text-gray-700">다른 직원 선택</span>
-              </label>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  value="admin"
-                  checked={workerOption === 'admin'}
-                  onChange={(e) => setWorkerOption(e.target.value as 'admin')}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700">사장(관리자 직접)</span>
               </label>
             </div>
 
