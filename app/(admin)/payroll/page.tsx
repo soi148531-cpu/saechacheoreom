@@ -1,10 +1,11 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Download, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Check, BarChart3 } from 'lucide-react'
 import PayrollDetailModal from '@/components/admin/PayrollDetailModal'
+import PayrollStatistics from '@/components/admin/PayrollStatistics'
 
-interface PayrollData {
+export interface PayrollData {
   id: string
   worker_id: string
   worker_name: string
@@ -41,6 +42,7 @@ export default function PayrollPage() {
   const [showBatchPayModal, setShowBatchPayModal] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
   const [batchPayLoading, setBatchPayLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'payroll' | 'statistics'>('payroll')
 
   const yearMonth = currentDate.toISOString().slice(0, 7)
 
@@ -231,177 +233,209 @@ export default function PayrollPage() {
           <p className="text-gray-600">월별 작업자 세차 정산 및 지급 관리</p>
         </div>
 
-        {/* 월별 선택 및 액션 */}
-        <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-sm">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handlePrevMonth}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-
-            <div className="text-lg font-semibold text-gray-900 min-w-32 text-center">
-              {currentDate.getFullYear()}년 {String(currentDate.getMonth() + 1).padStart(2, '0')}월
-            </div>
-
-            <button
-              onClick={handleNextMonth}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleGeneratePayroll}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              정산 생성
-            </button>
-            {selectedItems.size > 0 && (
-              <button
-                onClick={() => setShowBatchPayModal(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
-              >
-                <Check className="w-4 h-4" />
-                일괄 지급 ({selectedItems.size})
-              </button>
-            )}
-            <button
-              onClick={handleDownloadCSV}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              CSV 다운로드
-            </button>
-          </div>
+        {/* 탭 */}
+        <div className="flex gap-4 mb-6 border-b">
+          <button
+            onClick={() => setActiveTab('payroll')}
+            className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === 'payroll'
+                ? 'text-blue-600 border-blue-600'
+                : 'text-gray-600 border-transparent hover:text-gray-900'
+            }`}
+          >
+            정산 관리
+          </button>
+          <button
+            onClick={() => setActiveTab('statistics')}
+            className={`px-4 py-3 font-medium border-b-2 transition-colors flex items-center gap-2 ${
+              activeTab === 'statistics'
+                ? 'text-blue-600 border-blue-600'
+                : 'text-gray-600 border-transparent hover:text-gray-900'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            통계
+          </button>
         </div>
 
-        {/* 정산 현황 요약 */}
-        {summary && (
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="text-sm text-gray-600 mb-2">총 정산액</div>
-              <div className="text-2xl font-bold text-gray-900">
-                ₩{(summary.total_payroll / 1000).toFixed(0)}K
+        {/* 월별 선택 및 액션 */}
+        {activeTab === 'payroll' && (
+          <>
+            <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-sm">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handlePrevMonth}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <div className="text-lg font-semibold text-gray-900 min-w-32 text-center">
+                  {currentDate.getFullYear()}년 {String(currentDate.getMonth() + 1).padStart(2, '0')}월
+                </div>
+
+                <button
+                  onClick={handleNextMonth}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleGeneratePayroll}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  정산 생성
+                </button>
+                {selectedItems.size > 0 && (
+                  <button
+                    onClick={() => setShowBatchPayModal(true)}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    일괄 지급 ({selectedItems.size})
+                  </button>
+                )}
+                <button
+                  onClick={handleDownloadCSV}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  CSV 다운로드
+                </button>
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="text-sm text-gray-600 mb-2">직원 수</div>
-              <div className="text-2xl font-bold text-gray-900">{summary.total_workers}명</div>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="text-sm text-gray-600 mb-2">미지급</div>
-              <div className="text-2xl font-bold text-orange-600">{summary.unpaid_count}명</div>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="text-sm text-gray-600 mb-2">지급완료</div>
-              <div className="text-2xl font-bold text-green-600">{summary.paid_count}명</div>
-            </div>
-          </div>
-        )}
 
-        {/* 정산 테이블 */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-4 py-4 text-center text-sm font-semibold text-gray-900 w-10">
-                    <input
-                      type="checkbox"
-                      checked={selectedItems.size === payrolls.length && payrolls.length > 0}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">직원명</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">세차건수</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">정산액</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">추가금액</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">지급액</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">상태</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">액션</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                      로딩 중...
-                    </td>
-                  </tr>
-                ) : payrolls.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                      정산 데이터가 없습니다. [정산 생성] 버튼을 클릭하여 생성해주세요.
-                    </td>
-                  </tr>
-                ) : (
-                  payrolls.map(payroll => (
-                    <tr
-                      key={payroll.id}
-                      className={`border-b hover:bg-gray-50 transition-colors ${
-                        payroll.status === 'paid' ? 'bg-gray-50' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-4 text-center">
+            {/* 정산 현황 요약 */}
+            {summary && (
+              <div className="grid grid-cols-4 gap-4 mb-8">
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <div className="text-sm text-gray-600 mb-2">총 정산액</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    ₩{(summary.total_payroll / 1000).toFixed(0)}K
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <div className="text-sm text-gray-600 mb-2">직원 수</div>
+                  <div className="text-2xl font-bold text-gray-900">{summary.total_workers}명</div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <div className="text-sm text-gray-600 mb-2">미지급</div>
+                  <div className="text-2xl font-bold text-orange-600">{summary.unpaid_count}명</div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <div className="text-sm text-gray-600 mb-2">지급완료</div>
+                  <div className="text-2xl font-bold text-green-600">{summary.paid_count}명</div>
+                </div>
+              </div>
+            )}
+
+            {/* 정산 테이블 */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-100 border-b">
+                    <tr>
+                      <th className="px-4 py-4 text-center text-sm font-semibold text-gray-900 w-10">
                         <input
                           type="checkbox"
-                          checked={selectedItems.has(payroll.id)}
-                          onChange={() => handleSelectItem(payroll.id)}
-                          disabled={payroll.status === 'paid'}
-                          className="w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          checked={selectedItems.size === payrolls.length && payrolls.length > 0}
+                          onChange={handleSelectAll}
+                          className="w-4 h-4 cursor-pointer"
                         />
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {payroll.worker_name}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{payroll.total_washes}건</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        ₩{payroll.total_amount.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {payroll.bonus_amount > 0 ? (
-                          <span className="text-blue-600">+₩{payroll.bonus_amount.toLocaleString()}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                        ₩{payroll.paid_amount.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {payroll.status === 'paid' ? (
-                          <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
-                            지급완료
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-semibold">
-                            미지급
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <button
-                          onClick={() => {
-                            setSelectedPayroll(payroll)
-                            setShowDetailModal(true)
-                          }}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          상세보기
-                        </button>
-                      </td>
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">직원명</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">세차건수</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">정산액</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">추가금액</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">지급액</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">상태</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">액션</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                          로딩 중...
+                        </td>
+                      </tr>
+                    ) : payrolls.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                          정산 데이터가 없습니다. [정산 생성] 버튼을 클릭하여 생성해주세요.
+                        </td>
+                      </tr>
+                    ) : (
+                      payrolls.map(payroll => (
+                        <tr
+                          key={payroll.id}
+                          className={`border-b hover:bg-gray-50 transition-colors ${
+                            payroll.status === 'paid' ? 'bg-gray-50' : ''
+                          }`}
+                        >
+                          <td className="px-4 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedItems.has(payroll.id)}
+                              onChange={() => handleSelectItem(payroll.id)}
+                              disabled={payroll.status === 'paid'}
+                              className="w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                            {payroll.worker_name}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{payroll.total_washes}건</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            ₩{payroll.total_amount.toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {payroll.bonus_amount > 0 ? (
+                              <span className="text-blue-600">+₩{payroll.bonus_amount.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                            ₩{payroll.paid_amount.toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            {payroll.status === 'paid' ? (
+                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                                지급완료
+                              </span>
+                            ) : (
+                              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-semibold">
+                                미지급
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <button
+                              onClick={() => {
+                                setSelectedPayroll(payroll)
+                                setShowDetailModal(true)
+                              }}
+                              className="text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              상세보기
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 통계 탭 */}
+        {activeTab === 'statistics' && <PayrollStatistics payrolls={payrolls} />}
       </div>
 
       {/* 상세 모달 */}
