@@ -8,6 +8,7 @@ import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Che
 import Link from 'next/link'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
+import CompletionModal from '@/components/staff/CompletionModal'
 import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleRow = Schedule & {
@@ -44,6 +45,10 @@ export default function StaffPage() {
   const [date,    setDate]    = useState(today)
   const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(null)
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  
+  // CompletionModal state
+  const [completionModalOpen, setCompletionModalOpen] = useState(false)
+  const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null)
 
   const detectSchemaSupport = useCallback(async () => {
     const [{ error: scheduleAdminMemoError }, { error: washAdminNoteError }, { error: washCompletedByError }] = await Promise.all([
@@ -387,8 +392,8 @@ export default function StaffPage() {
                 task={task}
                 isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
                 canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
-                onToggleWorker={() => toggleDone(idx, 'worker')}
-                onToggleAdmin={() => toggleDone(idx, 'admin')}
+                onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
+                onToggleAdmin={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
                 onCancel={() => toggleDone(idx)}
                 onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
                 onMemoChange={v => updateTask(idx, { memo: v })}
@@ -404,6 +409,28 @@ export default function StaffPage() {
           </div>
         )}
       </div>
+
+      {/* CompletionModal */}
+      {completionModalOpen && selectedTaskIdx !== null && (
+        <CompletionModal
+          isOpen={completionModalOpen}
+          onClose={() => setCompletionModalOpen(false)}
+          vehicle={{
+            id: tasks[selectedTaskIdx].schedule.vehicle.id,
+            car_name: tasks[selectedTaskIdx].schedule.vehicle.car_name,
+            plate_number: tasks[selectedTaskIdx].schedule.vehicle.plate_number,
+            unit_price: tasks[selectedTaskIdx].schedule.vehicle.unit_price || 0,
+          }}
+          customer={tasks[selectedTaskIdx].schedule.vehicle.customer}
+          scheduled_date={tasks[selectedTaskIdx].schedule.scheduled_date}
+          schedule_id={tasks[selectedTaskIdx].schedule.id}
+          onSuccess={() => {
+            setCompletionModalOpen(false)
+            setSelectedTaskIdx(null)
+            fetchTasks()
+          }}
+        />
+      )}
     </div>
   )
 }
