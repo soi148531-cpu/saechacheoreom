@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     
     let query = supabase
       .from('workers')
-      .select('id, name, phone, status')
+      .select('id, name, phone, status', { count: 'exact' })
       .order('name', { ascending: true })
 
     if (!includeInactive) {
@@ -27,8 +27,16 @@ export async function GET(request: NextRequest) {
       return Response.json({ success: false, message: error.message }, { status: 500 })
     }
 
-    // 중복 제거
-    const uniqueData = Array.from(new Map(data.map(w => [w.id, w])).values())
+    // 중복 제거 (ID 기준으로)
+    const seen = new Set<string>()
+    const uniqueData = data.filter(w => {
+      if (seen.has(w.id)) {
+        return false
+      }
+      seen.add(w.id)
+      return true
+    })
+
     return Response.json({ success: true, data: uniqueData })
   } catch (err) {
     return Response.json(

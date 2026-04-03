@@ -59,6 +59,13 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // 1단계: 해당 직원이 포함된 wash_records의 worker_id를 NULL로 변경
+    await supabase
+      .from('wash_records')
+      .update({ worker_id: null })
+      .eq('worker_id', params.id)
+
+    // 2단계: 직원 삭제
     const { data, error } = await supabase
       .from('workers')
       .delete()
