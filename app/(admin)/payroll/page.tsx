@@ -46,7 +46,9 @@ export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<'payroll' | 'statistics'>('payroll')
   const [showSalaryLedger, setShowSalaryLedger] = useState(false)
 
-  const yearMonth = currentDate.toISOString().slice(0, 7)
+  const year = currentDate.getFullYear()
+  const month = String(currentDate.getMonth() + 1).padStart(2, '0')
+  const yearMonth = `${year}-${month}`
 
   // 정산 데이터 조회
   const fetchPayrolls = useCallback(async () => {
