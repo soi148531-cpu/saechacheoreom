@@ -22,21 +22,33 @@ export async function POST(request: NextRequest) {
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
     const endDate = `${year}-${month}-${lastDay}`
 
-    // 1. wash_records에서 worker별 세차 건수 집계
+    // 1. wash_records에서 completed_by(작업자 이름)별 세차 건수 집계
     const { data: washRecords, error: washError } = await supabase
       .from('wash_records')
-      .select('worker_id, worked_by')
+      .select('completed_by, worker_id')
       .gte('wash_date', startDate)
       .lte('wash_date', endDate)
 
     if (washError) throw washError
 
-    // Worker별 세차 건수 계산 (worker_id 기준)
+    // completed_by(작업자 이름)별 세차 건수 계산
     const workerWashes: Record<string, number> = {}
     washRecords?.forEach((record: any) => {
-      if (record.worker_id) {
-        workerWashes[record.worker_id] = (workerWashes[record.worker_id] || 0) + 1
+      if (record.completed_by && record.completed_by !== 'admin') {
+        workerWashes[record.completed_by] = (workerWashes[record.completed_by] || 0) + 1
       }
+    })
+
+    // 1-2. workers 테이블에서 워커 정보 조회 (이름 -> UUID 매핑)
+    const { data: workers, error: workersError } = await supabase
+      .from('workers')
+      .select('id, name')
+
+    if (workersError) throw workersError
+
+    const workerMap: Record<string, string> = {}
+    workers?.forEach((w: any) => {
+      workerMap[w.name] = w.id
     })
 
     // 2. 기존 정산 레코드 확인
@@ -50,20 +62,22 @@ export async function POST(request: NextRequest) {
     // 3. 정산 레코드 생성
     const payrollsToCreate: any[] = []
     
-    Object.entries(workerWashes).forEach(([workerId, washes]) => {
-      // 기본 지급액: 세차 건수 × 기본 가격 (1건당 10,000원)
-      const baseAmount = washes * 10000
-      
-      payrollsToCreate.push({
-        worker_id: workerId,
-        year_month,
-        total_washes: washes,
-        total_amount: baseAmount,
-        bonus_amount: 0, // 수동으로 입력받음
-        paid_amount: 0,
-        paid_at: null,
-        memo: ''
-      })
+    Object.entries(workerWashes).forEach(([workerName, washes]) => {
+      const workerId = workerMap[workerName]
+      if (workerId) {
+        const baseAmount = washes * 10000
+        
+        payrollsToCreate.push({
+          worker_id: workerId,
+          year_month,
+          total_washes: washes,
+          total_amount: baseAmount,
+          bonus_amount: 0,
+          paid_amount: 0,
+          paid_at: null,
+          memo: ''
+        })
+      }
     })
 
     if (payrollsToCreate.length === 0) {
