@@ -1,9 +1,10 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Download, Check, BarChart3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Check, BarChart3, Eye } from 'lucide-react'
 import PayrollDetailModal from '@/components/admin/PayrollDetailModal'
 import PayrollStatistics from '@/components/admin/PayrollStatistics'
+import SalaryLedgerModal from '@/components/admin/SalaryLedgerModal'
 
 export interface PayrollData {
   id: string
@@ -43,6 +44,7 @@ export default function PayrollPage() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
   const [batchPayLoading, setBatchPayLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'payroll' | 'statistics'>('payroll')
+  const [showSalaryLedger, setShowSalaryLedger] = useState(false)
 
   const yearMonth = currentDate.toISOString().slice(0, 7)
 
@@ -168,93 +170,10 @@ export default function PayrollPage() {
   const handleDownloadSalaryLedger = async () => {
     /* eslint-disable @typescript-eslint/no-explicit-any */
     if (!payrolls || payrolls.length === 0) {
-      alert('다운로드할 데이터가 없습니다')
+      alert('보기할 데이터가 없습니다')
       return
     }
-
-    try {
-      const response = await fetch(`/api/payroll/salary-ledger/${yearMonth}`)
-      const result = await response.json()
-
-      if (!result.success) {
-        alert('급여부 조회 실패')
-        return
-      }
-
-      const data: any = result.data
-      const lines: string[] = []
-
-      // 헤더
-      lines.push('='.repeat(100))
-      lines.push(`새차처럼 - 급여대장 (${data.year_month})`)
-      lines.push('생성일: ' + new Date(data.created_at).toLocaleDateString('ko-KR'))
-      lines.push('='.repeat(100))
-      lines.push('')
-
-      // 테이블 헤더
-      const cols = [
-        { key: '순번', width: 4 },
-        { key: '이름', width: 12 },
-        { key: '세차건수', width: 8 },
-        { key: '기본급여', width: 12 },
-        { key: '추가금액', width: 12 },
-        { key: '최종지급액', width: 12 },
-        { key: '지급여부', width: 8 },
-        { key: '지급일자', width: 12 },
-        { key: '지급방법', width: 12 }
-      ]
-
-      const headerLine = cols.map(c => c.key.padEnd(c.width)).join('')
-      const separator = cols.map(c => '-'.repeat(c.width)).join('')
-
-      lines.push(headerLine)
-      lines.push(separator)
-
-      // 데이터 행
-      data.ledger.forEach((row: any) => {
-        const line = [
-          String(row.순번).padEnd(4),
-          row.이름.padEnd(12),
-          String(row.세차건수).padEnd(8),
-          String(row.기본급여.toLocaleString()).padEnd(12),
-          String(row.추가금액.toLocaleString()).padEnd(12),
-          String(row.최종지급액.toLocaleString()).padEnd(12),
-          row.지급여부.padEnd(8),
-          row.지급일자.padEnd(12),
-          row.지급방법.padEnd(12)
-        ].join('')
-        lines.push(line)
-      })
-
-      lines.push(separator)
-
-      // 합계
-      const summary = data.summary
-      lines.push('')
-      lines.push('【 합 계 】')
-      lines.push(`  총 직원 수: ${summary.총직원수}명`)
-      lines.push(`  총 세차 건수: ${summary.총세차건수}건`)
-      lines.push(`  총 기본급여: ₩${summary.총기본급여.toLocaleString()}`)
-      lines.push(`  총 추가금액: ₩${summary.총추가금액.toLocaleString()}`)
-      lines.push(`  총 지급액: ₩${summary.총지급액.toLocaleString()}`)
-      lines.push('')
-      lines.push(`  지급 완료: ${summary.지급완료}명`)
-      lines.push(`  미 지급: ${summary.미지급}명`)
-      lines.push('')
-      lines.push('='.repeat(100))
-
-      const content = lines.join('\n')
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.href = url
-      link.download = `급여대장_${yearMonth}.txt`
-      link.click()
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('급여부 다운로드 실패:', error)
-      alert('급여부 다운로드 중 오류가 발생했습니다')
-    }
+    setShowSalaryLedger(true)
   }
 
   const handleSelectItem = (id: string) => {
@@ -401,8 +320,8 @@ export default function PayrollPage() {
                   onClick={handleDownloadSalaryLedger}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
                 >
-                  <Download className="w-4 h-4" />
-                  급여부 다운로드
+                  <Eye className="w-4 h-4" />
+                  급여부 보기
                 </button>
               </div>
             </div>
@@ -607,6 +526,13 @@ export default function PayrollPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showSalaryLedger && (
+        <SalaryLedgerModal 
+          yearMonth={yearMonth} 
+          onClose={() => setShowSalaryLedger(false)} 
+        />
       )}
     </div>
   )
