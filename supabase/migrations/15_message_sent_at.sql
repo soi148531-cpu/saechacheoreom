@@ -23,5 +23,15 @@ COMMENT ON COLUMN message_templates.message_body IS '메시지 본문 (변수: {
 
 -- 초기 템플릿 데이터
 INSERT INTO message_templates (template_key, message_body)
-  VALUES ('billing_notification', '{customer_name}님 - {car_name} {month} 청구액 {amount}원 입금 부탁드립니다.')
+  VALUES ('billing_notification', '[새차처럼] {month} 세차 청구 안내
+
+고객명: {customer_name} 님
+연락처: {phone}
+
+[{car_name}] {plate_number}
+   세차 내역은 앱에서 확인해주세요.
+   총액: {amount}원
+
+총 청구금액: {amount}원
+입금계좌: (계좌정보)')
   ON CONFLICT (template_key) DO NOTHING;

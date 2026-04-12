@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
-import type { Billing, MessageTemplate } from '@/types'
+import { formatPrice } from '@/lib/utils'
+import type { Billing, MessageTemplate, WashRecord } from '@/types'
 
 const supabase = createClient()
 
@@ -56,30 +57,59 @@ export function renderMessageTemplate(
 }
 
 /**
- * 청구 정보로 메시지 생성
+ * 청구 정보로 상세 메시지 생성
  * @param billing - 청구 데이터 (vehicle 포함)
  * @param yearMonth - 년월 (예: "2026-04")
+ * @param records - 세차 기록
  */
 export async function buildBillingMessage(
   billing: Billing,
-  yearMonth: string
+  yearMonth: string,
+  records: WashRecord[] = []
 ): Promise<string> {
-  const template = await getMessageTemplate('billing_notification')
-  if (!template) {
-    // 폴백 메시지
-    return `${billing.vehicle?.customer?.name ?? '고객'}님 - ${billing.total_amount}원 입금 부탁드립니다.`
-  }
-
   const [year, month] = yearMonth.split('-')
-  const variables = {
-    customer_name: billing.vehicle?.customer?.name ?? '',
-    car_name: billing.vehicle?.car_name ?? '',
-    amount: billing.total_amount,
-    unit_number: billing.vehicle?.customer?.unit_number ?? '',
-    month: `${parseInt(month, 10)}월`
+  const monthNum = parseInt(month, 10)
+
+  let lines: string[] = []
+
+  // 헤더
+  lines.push(`[새차처럼] ${monthNum}월 세차 청구 안내`)
+  lines.push('')
+
+  // 고객 정보
+  const customerName = billing.vehicle?.customer?.name || '고객'
+  lines.push(`고객명: ${customerName} 님`)
+
+  const phone = billing.vehicle?.customer?.phone
+  if (phone) {
+    lines.push(`연락처: ${phone}`)
+  }
+  lines.push('')
+
+  // 차량 정보
+  const carName = billing.vehicle?.car_name || ''
+  const plateNumber = billing.vehicle?.plate_number || ''
+  lines.push(`[${carName}] ${plateNumber}`)
+
+  // 세차 내역
+  if (records.length > 0) {
+    records.forEach(r => {
+      const d = new Date(r.wash_date)
+      const day = d.getDate()
+      lines.push(`   ${monthNum}/${day} 세차: ${formatPrice(r.price)}`)
+    })
   }
 
-  return renderMessageTemplate(template.message_body, variables)
+  // 소계
+  const washTotal = records.reduce((sum, r) => sum + r.price, 0)
+  lines.push(`  소계: ${formatPrice(washTotal)}`)
+  lines.push('')
+
+  // 총액
+  lines.push(`총 청구금액: ${formatPrice(billing.total_amount)}원`)
+  lines.push(`입금계좌: (계좌정보)`)
+
+  return lines.join('\n')
 }
 
 /**
