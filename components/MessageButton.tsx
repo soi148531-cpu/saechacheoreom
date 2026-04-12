@@ -4,24 +4,34 @@ import { useState } from 'react'
 import { updateMessageSentAt } from '@/lib/services/messageService'
 
 interface MessageButtonProps {
-  billingId: string
+  billingId: string | null
   messageSentAt: string | null
   onUpdate?: (billingId: string) => void
+  onEnsureBilling?: () => Promise<string | undefined>
 }
 
 export function MessageButton({
   billingId,
   messageSentAt,
-  onUpdate
+  onUpdate,
+  onEnsureBilling
 }: MessageButtonProps) {
   const [loading, setLoading] = useState(false)
 
   async function handleSendMessage() {
     setLoading(true)
-    const { error } = await updateMessageSentAt(billingId)
+    let id = billingId
+    if (!id && onEnsureBilling) {
+      id = (await onEnsureBilling()) ?? null
+    }
+    if (!id) {
+      setLoading(false)
+      return
+    }
+    const { error } = await updateMessageSentAt(id)
     setLoading(false)
     if (!error) {
-      onUpdate?.(billingId)
+      onUpdate?.(id)
     }
   }
 

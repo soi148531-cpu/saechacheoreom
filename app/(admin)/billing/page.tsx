@@ -754,8 +754,8 @@ export default function BillingPage() {
                               ) : (
                                 <span className="text-gray-400">증빙 미선택</span>
                               )}
-                              {vb.sentAt ? (
-                                <span className="text-blue-600">카톡 {(() => { const d = new Date(vb.sentAt!); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })()}</span>
+                              {vb.messageSentAt ? (
+                                <span className="text-blue-600">카톡 {(() => { const d = new Date(vb.messageSentAt!); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })()}</span>
                               ) : (
                                 <span className="text-gray-400">카톡 미발송</span>
                               )}
@@ -901,13 +901,12 @@ export default function BillingPage() {
                                       <Plus size={14} />
                                       항목 추가
                                     </button>
-                                    {vb.billingId && (
-                                      <MessageButton
-                                        billingId={vb.billingId}
-                                        messageSentAt={vb.messageSentAt}
-                                        onUpdate={handleMessageUpdate}
-                                      />
-                                    )}
+                                    <MessageButton
+                                      billingId={vb.billingId}
+                                      messageSentAt={vb.messageSentAt}
+                                      onEnsureBilling={() => ensureBilling(vb)}
+                                      onUpdate={handleMessageUpdate}
+                                    />
                                     <button
                                       onClick={() => openPaymentModal(vb)}
                                       className="text-xs px-2 py-1 rounded font-medium border border-green-300 text-green-700 hover:bg-green-50 transition-colors"

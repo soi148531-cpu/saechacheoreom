@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/utils'
-import type { Billing, MessageTemplate, WashRecord } from '@/types'
+import type { Billing, MessageTemplate } from '@/types'
 
 const supabase = createClient()
 

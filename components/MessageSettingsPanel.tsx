@@ -43,10 +43,13 @@ export function MessageSettingsPanel() {
       {/* 사용 가능한 변수 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
         <p className="text-xs font-semibold text-blue-900 mb-1">사용 가능한 변수:</p>
-        <p className="text-xs text-blue-800">
-          {'{customer_name}'} (고객명) · {'{car_name}'} (차량명) · {'{amount}'} (금액) ·
-          {'{unit_number}'} (호수) · {'{month}'} (월)
-        </p>
+        <div className="text-xs text-blue-800 space-y-0.5">
+          <p><code className="bg-blue-100 px-1 rounded">{'{customer_name}'}</code> 고객명</p>
+          <p><code className="bg-blue-100 px-1 rounded">{'{phone}'}</code> 연락처</p>
+          <p><code className="bg-blue-100 px-1 rounded">{'{month}'}</code> 월 (예: 4)</p>
+          <p><code className="bg-blue-100 px-1 rounded">{'{vehicle_details}'}</code> 차량별 세차 내역 전체 (자동 생성)</p>
+          <p><code className="bg-blue-100 px-1 rounded">{'{total_amount}'}</code> 총 청구금액</p>
+        </div>
       </div>
 
       {/* 템플릿 표시/수정 */}
@@ -55,7 +58,7 @@ export function MessageSettingsPanel() {
           <textarea
             value={body}
             onChange={e => setBody(e.target.value)}
-            rows={4}
+            rows={12}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="메시지 템플릿을 입력하세요"
           />
@@ -81,7 +84,7 @@ export function MessageSettingsPanel() {
       ) : (
         <div>
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 min-h-20">
-            <p className="text-sm text-gray-800">{body}</p>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">{body}</p>
           </div>
           <button
             onClick={() => setEditing(true)}
