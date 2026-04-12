@@ -221,11 +221,12 @@ export default function BillingPage() {
     const records = (rRes.data ?? []) as WashRecord[]
     const billings = (bRes.data ?? []) as any[]
 
-    // 차량별 청구 정보 구성 (종료/세차없는 차량 제외, 정지 중인 차량 포함)
+    // 차량별 청구 정보 구성 (청구 월 이전 종료/세차없는 차량 제외)
     const vehicleBillings: Record<string, VehicleBilling> = {}
     vehicles.forEach(v => {
-      // 필터링: 종료된 차량, 세차 실적 없는 차량만 제외
-      if (v.end_date) return
+      // 필터링: 청구 월 이전에 이미 종료된 차량, 세차 실적 없는 차량만 제외
+      // 정지 상태든, 종료 예정이든, 청구 월에 세차 기록이 있으면 표시
+      if (v.end_date && v.end_date < startDate) return
       
       const vehicleRecords = records.filter(r => r.vehicle_id === v.id)
       if (vehicleRecords.length === 0) return
