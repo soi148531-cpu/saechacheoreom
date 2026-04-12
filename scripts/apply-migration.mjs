@@ -22,7 +22,7 @@ if (!TOKEN) {
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const sql   = readFileSync(
-  join(__dir, '../supabase/migrations/06_staff_page_schema_hotfix.sql'),
+  join(__dir, '../supabase/migrations/15_message_sent_at.sql'),
   'utf8'
 )
 
@@ -58,7 +58,6 @@ if (!res.ok) {
 }
 
 console.log('\n✅  마이그레이션 완료!')
-console.log('   schedules.admin_memo    ← 추가됨')
-console.log('   schedules.sort_order    ← 추가됨')
-console.log('   wash_records.admin_note ← 추가됨')
-console.log('   wash_records.completed_by ← 추가됨\n')
+console.log('   billings.message_sent_at       ← 추가됨 (카톡 발송 시각)')
+console.log('   message_templates 테이블       ← 생성됨 (메시지 템플릿)')
+console.log('   idx_billings_message_sent_at   ← 인덱스 추가됨\n')

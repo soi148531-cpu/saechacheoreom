@@ -10,7 +10,8 @@ import {
   PauseCircle, PlayCircle, Trash2, Pencil, Check, X, RotateCcw
 } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
-import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, getMonthlyPrice } from '@/lib/constants/pricing'
+import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
+import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice, formatDate } from '@/lib/utils'
 import { generateSchedules, parseLocalDate } from '@/lib/schedule/generator'
 import type { Customer, Vehicle, VehicleStatus, CarGrade, MonthlyCount } from '@/types'
@@ -33,6 +34,7 @@ export default function CustomerDetailPage() {
   const { id }   = useParams<{ id: string }>()
   const router   = useRouter()
   const supabase = createClient()
+  const { getMonthlyPrice } = usePricing()
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading,  setLoading]  = useState(true)
@@ -46,13 +48,14 @@ export default function CustomerDetailPage() {
   const [editSaving,  setEditSaving]  = useState(false)
   // 차량 편집 모드
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
-  const [editVCarName,   setEditVCarName]   = useState('')
-  const [editVPlate,     setEditVPlate]     = useState('')
-  const [editVGrade,     setEditVGrade]     = useState<CarGrade>('mid_sedan')
-  const [editVCount,     setEditVCount]     = useState<MonthlyCount>('monthly_1')
-  const [editVUnitPrice, setEditVUnitPrice] = useState('')
-  const [editVEndDate,   setEditVEndDate]   = useState('')
-  const [vehicleSaving,  setVehicleSaving]  = useState(false)
+  const [editVCarName,     setEditVCarName]     = useState('')
+  const [editVPlate,       setEditVPlate]       = useState('')
+  const [editVGrade,       setEditVGrade]       = useState<CarGrade>('mid_sedan')
+  const [editVCount,       setEditVCount]       = useState<MonthlyCount>('monthly_1')
+  const [editVUnitPrice,   setEditVUnitPrice]   = useState('')
+  const [editVCustomPrice, setEditVCustomPrice] = useState('')
+  const [editVEndDate,     setEditVEndDate]     = useState('')
+  const [vehicleSaving,    setVehicleSaving]    = useState(false)
   const [extending,      setExtending]      = useState<string | null>(null)
   // 서비스 정지: 어떤 차량이 정지 대기 중인지, 날짜 선택 값
   const [pausingId,   setPausingId]   = useState<string | null>(null)
@@ -100,6 +103,7 @@ export default function CustomerDetailPage() {
     setEditVGrade(v.car_grade)
     setEditVCount(v.monthly_count)
     setEditVUnitPrice(v.unit_price?.toString() ?? '')
+    setEditVCustomPrice(v.custom_price?.toString() ?? '')
     setEditVEndDate(v.end_date ?? '')
   }
 
@@ -112,6 +116,7 @@ export default function CustomerDetailPage() {
         ? getMonthlyPrice(editVGrade, editVCount) / (editVCount === 'monthly_1' ? 1 : editVCount === 'monthly_2' ? 2 : 4)
         : 0
     const monthlyPrice = editVCount !== 'onetime' ? getMonthlyPrice(editVGrade, editVCount) : null
+    const customPrice = editVCustomPrice ? Number(editVCustomPrice) : null
     await db().from('vehicles').update({
       car_name:      editVCarName.trim(),
       plate_number:  editVPlate.trim().replace(/\s/g, ''),
@@ -119,6 +124,7 @@ export default function CustomerDetailPage() {
       monthly_count: editVCount,
       unit_price:    unitPrice,
       monthly_price: monthlyPrice,
+      custom_price:  customPrice,
       end_date:      editVEndDate || null,
     }).eq('id', editingVehicleId)
     setVehicleSaving(false)
@@ -352,6 +358,11 @@ export default function CustomerDetailPage() {
                       <input type="number" value={editVUnitPrice} onChange={e => setEditVUnitPrice(e.target.value)} placeholder="비워두면 자동계산" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
+                      <label className="text-xs text-gray-500 block mb-1">개별 월정가 (특가 설정)</label>
+                      <input type="number" value={editVCustomPrice} onChange={e => setEditVCustomPrice(e.target.value)} placeholder="비워두면 기본 가격표 사용" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" step={1000} min={0} />
+                      <p className="text-xs text-orange-500 mt-0.5">※ 입력 시 기본 가격표보다 이 금액이 우선 적용됩니다</p>
+                    </div>
+                    <div>
                       <label className="text-xs text-gray-500 block mb-1">서비스 종료일</label>
                       <input type="date" value={editVEndDate} onChange={e => setEditVEndDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
@@ -403,6 +414,12 @@ export default function CustomerDetailPage() {
                       <div>
                         <span className="text-gray-400">월정가</span>{' '}
                         <span className="font-medium">{formatPrice(v.monthly_price)}</span>
+                      </div>
+                    )}
+                    {v.custom_price && (
+                      <div>
+                        <span className="text-orange-400">특가</span>{' '}
+                        <span className="font-semibold text-orange-600">{formatPrice(v.custom_price)}</span>
                       </div>
                     )}
                     {v.unit_price && (

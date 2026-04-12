@@ -10,8 +10,8 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { db } from '@/lib/supabase/client'
 import {
   CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS,
-  getMonthlyPrice,
 } from '@/lib/constants/pricing'
+import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice } from '@/lib/utils'
 import {
   generateSchedules, getDateLabel, getWeekdayLabel, parseLocalDate,
@@ -46,6 +46,7 @@ const emptyVehicle = (): VehicleForm => ({
 export default function NewCustomerPage() {
   const router   = useRouter()
   const supabase = db()
+  const { getMonthlyPrice } = usePricing()
 
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
@@ -274,6 +275,7 @@ function VehicleCard({
   onRemove: (i: number) => void
   showRemove: boolean
 }) {
+  const { getMonthlyPrice } = usePricing()
   const unitPrice    = v.monthly_count === 'onetime'
     ? 0
     : getMonthlyPrice(v.car_grade, v.monthly_count) / (v.monthly_count === 'monthly_1' ? 1 : v.monthly_count === 'monthly_2' ? 2 : 4)

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/utils'
-import type { Vehicle, WashRecord } from '@/types'
+import type { Vehicle, WashRecord, Billing } from '@/types'
 
 type ViewMode = 'daily' | 'weekly' | 'monthly'
 
@@ -82,20 +82,26 @@ export default function StatsPage() {
   const [view,        setView]        = useState<ViewMode>('monthly')
   const [vehicles,    setVehicles]    = useState<Vehicle[]>([])
   const [washRecords, setWashRecords] = useState<WashRecord[]>([])
+  const [billings,    setBillings]    = useState<Billing[]>([])
   const [loading,     setLoading]     = useState(true)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [vRes, rRes] = await Promise.all([
+    const [vRes, rRes, bRes] = await Promise.all([
       supabase.from('vehicles').select('*'),
       supabase.from('wash_records')
         .select('*')
         .gte('wash_date', `${year}-01-01`)
         .lte('wash_date', `${year}-12-31`)
         .eq('is_completed', true),
+      supabase.from('billings')
+        .select('paid_amount, year_month, total_amount')
+        .gte('year_month', `${year}-01`)
+        .lte('year_month', `${year}-12`),
     ])
     if (vRes.data)  setVehicles(vRes.data as Vehicle[])
     if (rRes.data)  setWashRecords(rRes.data as WashRecord[])
+    if (bRes.data)  setBillings(bRes.data as Billing[])
     setLoading(false)
   }, [supabase, year])
 
@@ -151,6 +157,12 @@ export default function StatsPage() {
   const expectedRevenue = active.reduce((s, v) => s + (v.monthly_price ?? 0), 0)
   const monthActual = monthRecords.reduce((s, r) => s + r.price, 0)
   const achieveRate = expectedRevenue > 0 ? Math.round((monthActual / expectedRevenue) * 100) : 0
+
+  const monthYm = `${year}-${padMonth(month)}`
+  const monthPaidAmount = useMemo(
+    () => billings.filter(b => b.year_month === monthYm).reduce((s, b) => s + (b.paid_amount ?? 0), 0),
+    [billings, monthYm]
+  )
 
   const periodLabel = view === 'monthly' ? `${year}년` : `${year}년 ${MONTHS_KR[month]}`
 
@@ -269,7 +281,7 @@ export default function StatsPage() {
                 style={{ width: `${Math.min(achieveRate, 100)}%` }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-3 gap-3 text-sm">
               <div>
                 <p className="text-xs text-gray-400">예상 매출</p>
                 <p className="font-semibold text-gray-700">{formatPrice(expectedRevenue)}</p>
@@ -277,6 +289,10 @@ export default function StatsPage() {
               <div>
                 <p className="text-xs text-gray-400">실제 매출</p>
                 <p className="font-semibold text-gray-700">{formatPrice(monthActual)}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2 border border-green-200">
+                <p className="text-xs text-green-600 font-semibold">실제 입금액</p>
+                <p className="font-bold text-green-700">{formatPrice(monthPaidAmount)}</p>
               </div>
             </div>
           </div>

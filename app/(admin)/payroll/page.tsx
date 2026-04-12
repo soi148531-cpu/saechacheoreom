@@ -124,7 +124,11 @@ export default function PayrollPage() {
     if (confirm('지급 처리를 취소하시겠습니까?')) {
       try {
         const response = await fetch(`/api/payroll/${payrollId}`, {
-          method: 'DELETE'
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paid_at: null
+          })
         })
 
         if (response.ok) {
@@ -133,6 +137,26 @@ export default function PayrollPage() {
         }
       } catch (error) {
         console.error('지급 취소 실패:', error)
+      }
+    }
+  }
+
+  const handleDeletePayroll = async (payrollId: string) => {
+    if (confirm('정산 기록을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.')) {
+      try {
+        const response = await fetch(`/api/payroll/${payrollId}`, {
+          method: 'DELETE'
+        })
+
+        if (response.ok) {
+          alert('정산 기록이 삭제되었습니다')
+          fetchPayrolls()
+          setShowDetailModal(false)
+        } else {
+          alert('정산 삭제 실패')
+        }
+      } catch (error) {
+        console.error('정산 삭제 실패:', error)
       }
     }
   }
@@ -274,8 +298,8 @@ export default function PayrollPage() {
         {/* 월별 선택 및 액션 */}
         {activeTab === 'payroll' && (
           <>
-            <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-sm">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-8 bg-white p-4 rounded-lg shadow-sm">
+              <div className="flex items-center justify-center gap-4 order-2 lg:order-1">
                 <button
                   onClick={handlePrevMonth}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -295,17 +319,17 @@ export default function PayrollPage() {
                 </button>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 order-1 lg:order-2">
                 <button
                   onClick={handleGeneratePayroll}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
                 >
                   정산 생성
                 </button>
                 {selectedItems.size > 0 && (
                   <button
                     onClick={() => setShowBatchPayModal(true)}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 text-sm"
                   >
                     <Check className="w-4 h-4" />
                     일괄 지급 ({selectedItems.size})
@@ -313,47 +337,49 @@ export default function PayrollPage() {
                 )}
                 <button
                   onClick={handleDownloadCSV}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center justify-center gap-2 text-sm"
                 >
                   <Download className="w-4 h-4" />
-                  CSV 다운로드
+                  <span className="hidden sm:inline">CSV 다운로드</span>
+                  <span className="sm:hidden">CSV</span>
                 </button>
                 <button
                   onClick={handleDownloadSalaryLedger}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center justify-center gap-2 text-sm"
                 >
                   <Eye className="w-4 h-4" />
-                  급여부 보기
+                  <span className="hidden sm:inline">급여부 보기</span>
+                  <span className="sm:hidden">급여부</span>
                 </button>
               </div>
             </div>
 
             {/* 정산 현황 요약 */}
             {summary && (
-              <div className="grid grid-cols-4 gap-4 mb-8">
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <div className="text-sm text-gray-600 mb-2">총 정산액</div>
-                  <div className="text-2xl font-bold text-gray-900">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm">
+                  <div className="text-xs md:text-sm text-gray-600 mb-2">총 정산액</div>
+                  <div className="text-xl md:text-2xl font-bold text-gray-900">
                     ₩{(summary.total_payroll / 1000).toFixed(0)}K
                   </div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <div className="text-sm text-gray-600 mb-2">직원 수</div>
-                  <div className="text-2xl font-bold text-gray-900">{summary.total_workers}명</div>
+                <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm">
+                  <div className="text-xs md:text-sm text-gray-600 mb-2">직원 수</div>
+                  <div className="text-xl md:text-2xl font-bold text-gray-900">{summary.total_workers}명</div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <div className="text-sm text-gray-600 mb-2">미지급</div>
-                  <div className="text-2xl font-bold text-orange-600">{summary.unpaid_count}명</div>
+                <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm">
+                  <div className="text-xs md:text-sm text-gray-600 mb-2">미지급</div>
+                  <div className="text-xl md:text-2xl font-bold text-orange-600">{summary.unpaid_count}명</div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <div className="text-sm text-gray-600 mb-2">지급완료</div>
-                  <div className="text-2xl font-bold text-green-600">{summary.paid_count}명</div>
+                <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm">
+                  <div className="text-xs md:text-sm text-gray-600 mb-2">지급완료</div>
+                  <div className="text-xl md:text-2xl font-bold text-green-600">{summary.paid_count}명</div>
                 </div>
               </div>
             )}
 
-            {/* 정산 테이블 */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {/* 정산 테이블 - PC/태블릿 */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-100 border-b">
@@ -372,7 +398,7 @@ export default function PayrollPage() {
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">추가금액</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">지급액</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">상태</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">액션</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">상세내역</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -451,6 +477,80 @@ export default function PayrollPage() {
                 </table>
               </div>
             </div>
+
+            {/* 정산 카드 리스트 - 모바일 */}
+            <div className="md:hidden space-y-3">
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">로딩 중...</div>
+              ) : payrolls.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">정산 데이터가 없습니다. [정산 생성] 버튼을 클릭하여 생성해주세요.</div>
+              ) : (
+                payrolls.map(payroll => (
+                  <div
+                    key={payroll.id}
+                    className={`bg-white rounded-lg p-4 shadow-sm border-l-4 ${
+                      payroll.status === 'paid'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-orange-500'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-lg">{payroll.worker_name}</h3>
+                        <p className="text-xs text-gray-500">
+                          {payroll.total_washes}건
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-gray-900">
+                          ₩{payroll.paid_amount.toLocaleString()}
+                        </div>
+                        <div className={`text-xs inline-block px-2 py-1 rounded-full font-semibold mt-1 ${
+                          payroll.status === 'paid'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-orange-100 text-orange-800'
+                        }`}>
+                          {payroll.status === 'paid' ? '지급완료' : '미지급'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                      <div className="bg-white p-2 rounded">
+                        <p className="text-gray-500">정산액</p>
+                        <p className="font-semibold text-gray-900">₩{payroll.total_amount.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-white p-2 rounded">
+                        <p className="text-gray-500">추가금액</p>
+                        <p className="font-semibold text-gray-900">
+                          {payroll.bonus_amount > 0 ? `+₩${payroll.bonus_amount.toLocaleString()}` : '-'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {payroll.status === 'unpaid' && (
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.has(payroll.id)}
+                          onChange={() => handleSelectItem(payroll.id)}
+                          className="w-5 h-5 cursor-pointer"
+                        />
+                      )}
+                      <button
+                        onClick={() => {
+                          setSelectedPayroll(payroll)
+                          setShowDetailModal(true)
+                        }}
+                        className="flex-1 text-blue-600 hover:bg-blue-50 py-2 rounded font-medium text-sm"
+                      >
+                        상세보기
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </>
         )}
 
@@ -468,6 +568,7 @@ export default function PayrollPage() {
           }}
           onPaymentProcess={handlePaymentProcess}
           onCancelPayment={handleCancelPayment}
+          onDeletePayroll={handleDeletePayroll}
           onRefresh={fetchPayrolls}
         />
       )}

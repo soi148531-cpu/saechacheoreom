@@ -28,6 +28,8 @@ interface Worker {
   phone: string | null
 }
 
+type WorkType = 'exterior' | 'interior_only' | 'both'
+
 export default function CompletionModal({
   isOpen,
   onClose,
@@ -38,10 +40,10 @@ export default function CompletionModal({
   onSuccess,
 }: CompletionModalProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
-  const [workerOption, setWorkerOption] = useState<'me' | 'other'>('me')
-  const [selectedWorker, setSelectedWorker] = useState<string | null>(null)
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string>('')
   const [completedAt, setCompletedAt] = useState('')
-  const [hasInterior, setHasInterior] = useState(false)
+  const [workType, setWorkType] = useState<WorkType>('exterior')
+  const [interiorOnlyPrice, setInteriorOnlyPrice] = useState<number>(20000)
   const [memo, setMemo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -54,59 +56,63 @@ export default function CompletionModal({
     setCompletedAt(`${hours}:${minutes}`)
   }, [])
 
-  // 직원 목록 불러오기 (활성 직원만)
+  // 직원 목록 불러오기 — 모달이 열릴 때 1회만 실행
   useEffect(() => {
+    if (!isOpen) return
+    setError('')
+    setWorkType('exterior')
+    setInteriorOnlyPrice(20000)
     const fetchWorkers = async () => {
       try {
         const res = await fetch('/api/workers')
         if (!res.ok) return
         const json = await res.json()
         let data = (json.data || json) as Worker[]
-        // 중복 제거 (ID 기준)
         data = Array.from(new Map(data.map(w => [w.id, w])).values())
         setWorkers(data)
-        if (data.length > 0 && !selectedWorker) {
-          setSelectedWorker(data[0].id)
+        if (data.length > 0) {
+          setSelectedWorkerId(data[0].id)
         }
       } catch (err) {
         console.error('Failed to fetch workers:', err)
       }
     }
-
-    if (isOpen) {
-      fetchWorkers()
-    }
-  }, [isOpen, selectedWorker])
+    fetchWorkers()
+  }, [isOpen])
 
   const calculatePrice = () => {
-    const basePrice = vehicle.unit_price || 0
-    return hasInterior ? basePrice + 10000 : basePrice
+    if (workType === 'exterior') return vehicle.unit_price || 0
+    if (workType === 'both') return (vehicle.unit_price || 0) + 10000
+    return interiorOnlyPrice
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+  const getServiceType = () => {
+    if (workType === 'both') return 'interior'
+    if (workType === 'interior_only') return 'interior_only'
+    return 'regular'
+  }
 
+  const selectedWorkerObj = workers.find(w => w.id === selectedWorkerId)
+
+  const handleSubmit = async () => {
+    setError('')
+
+    if (!selectedWorkerId || !selectedWorkerObj) {
+      setError('작업자를 선택해주세요')
+      return
+    }
+
+    if (workType === 'interior_only' && interiorOnlyPrice <= 0) {
+      setError('실내 작업 금액을 입력해주세요.')
+      return
+    }
+
+    setLoading(true)
     try {
       const finalPrice = calculatePrice()
-      
-      let workerId: string | null = null
-      let workedBy: 'worker' | 'admin' = 'worker'
-
-      if (workerOption === 'other' && selectedWorker) {
-        workerId = selectedWorker
-        workedBy = 'worker'
-      } else if (workerOption === 'me') {
-        // "나" 옵션은 현재 로그인 워커가 필요하지만, 미구현
-        // 현재는 첫 번째 워커 기본값
-        workerId = workers[0]?.id || null
-        workedBy = 'worker'
-      }
-
-      const dateStr = new Date().toISOString().split('T')[0]
+      const wash_date = scheduled_date
       const [hours, mins] = completedAt.split(':')
-      const completedAtISO = `${dateStr}T${hours}:${mins}:00Z`
+      const completedAtISO = `${wash_date}T${hours}:${mins}:00`
 
       const response = await fetch('/api/wash-records/create', {
         method: 'POST',
@@ -114,19 +120,20 @@ export default function CompletionModal({
         body: JSON.stringify({
           vehicle_id: vehicle.id,
           schedule_id,
-          wash_date: dateStr,
+          wash_date,
           price: finalPrice,
-          service_type: hasInterior ? 'interior' : 'regular',
-          worker_id: workerId,
-          worked_by: workedBy,
+          service_type: getServiceType(),
+          worker_id: selectedWorkerId,
+          worked_by: 'worker',
+          completed_by: selectedWorkerObj.name,
           completed_at: completedAtISO,
           memo: memo.trim() || null,
         }),
       })
 
+      const result = await response.json()
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || '완료 처리 실패')
+        throw new Error(result.error || result.message || '완료 처리 실패')
       }
 
       onSuccess?.()
@@ -147,6 +154,7 @@ export default function CompletionModal({
         <div className="flex items-center justify-between border-b border-gray-200 p-4 sticky top-0 bg-white">
           <h2 className="text-lg font-bold text-gray-900">세차 완료 처리</h2>
           <button
+            type="button"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
           >
@@ -155,7 +163,7 @@ export default function CompletionModal({
         </div>
 
         {/* 본문 */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <div className="p-4 space-y-4">
           {/* 차량/고객 정보 */}
           <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
             <p className="font-semibold text-gray-900 text-sm">{vehicle.car_name}</p>
@@ -169,41 +177,19 @@ export default function CompletionModal({
             <p className="text-xs text-gray-500 mt-2">{scheduled_date}</p>
           </div>
 
-          {/* 당번 선택 */}
+          {/* 당번(작업자) 선택 */}
           <div className="border-t border-gray-100 pt-3">
             <label className="block text-xs font-bold text-gray-700 mb-2">
               당번 (작업자)
             </label>
-            <div className="space-y-2">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  value="me"
-                  checked={workerOption === 'me'}
-                  onChange={(e) => setWorkerOption(e.target.value as 'me')}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700">나(현재 로그인한 직원)</span>
-              </label>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  value="other"
-                  checked={workerOption === 'other'}
-                  onChange={(e) => setWorkerOption(e.target.value as 'other')}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700">다른 직원 선택</span>
-              </label>
-            </div>
-
-            {workerOption === 'other' && workers.length > 0 && (
+            {workers.length === 0 ? (
+              <p className="text-xs text-gray-400">직원 목록 불러오는 중...</p>
+            ) : (
               <select
-                value={selectedWorker || ''}
-                onChange={(e) => setSelectedWorker(e.target.value)}
-                className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                value={selectedWorkerId}
+                onChange={(e) => setSelectedWorkerId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                <option value="">직원 선택</option>
                 {workers.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name} {w.phone ? `(${w.phone})` : ''}
@@ -226,32 +212,81 @@ export default function CompletionModal({
             />
           </div>
 
-          {/* 실내청소 */}
+          {/* 작업 유형 */}
           <div className="border-t border-gray-100 pt-3">
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={hasInterior}
-                onChange={(e) => setHasInterior(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm font-semibold text-gray-700">
-                실내청소 (+10,000원)
-              </span>
-            </label>
-            {hasInterior && (
-              <p className="text-xs text-blue-600 mt-1">
-                금액: {vehicle.unit_price?.toLocaleString() || 0} + 10,000 = {calculatePrice().toLocaleString()}원
-              </p>
+            <label className="block text-xs font-bold text-gray-700 mb-2">작업 유형</label>
+            <div className="space-y-2">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="work_type"
+                  value="exterior"
+                  checked={workType === 'exterior'}
+                  onChange={() => setWorkType('exterior')}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">외부 세차</span>
+                <span className="text-xs text-gray-400 ml-2">({(vehicle.unit_price || 0).toLocaleString()}원)</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="work_type"
+                  value="both"
+                  checked={workType === 'both'}
+                  onChange={() => setWorkType('both')}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">외부 + 실내 세차</span>
+                <span className="text-xs text-gray-400 ml-2">({(vehicle.unit_price || 0).toLocaleString()} + 10,000원)</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="work_type"
+                  value="interior_only"
+                  checked={workType === 'interior_only'}
+                  onChange={() => setWorkType('interior_only')}
+                  className="mr-2"
+                />
+                <span className="text-sm font-semibold text-orange-700">실내 전용</span>
+                <span className="text-xs text-orange-500 ml-2">(가격 직접 입력)</span>
+              </label>
+            </div>
+
+            {/* 실내 전용 가격 입력 */}
+            {workType === 'interior_only' && (
+              <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <label className="block text-xs font-medium text-orange-800 mb-1">
+                  실내 작업 금액
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={interiorOnlyPrice}
+                    onChange={(e) => setInteriorOnlyPrice(Number(e.target.value))}
+                    className="flex-1 px-3 py-2 border border-orange-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    min={0}
+                    step={1000}
+                  />
+                  <span className="text-sm text-orange-700 whitespace-nowrap">원</span>
+                </div>
+                <p className="text-xs text-orange-600 mt-1">고객과 협상한 금액으로 변경하세요</p>
+              </div>
             )}
           </div>
 
           {/* 예상 청구액 */}
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-            <p className="text-xs text-gray-600">예상 청구액</p>
+            <p className="text-xs text-gray-600">
+              {workType === 'interior_only' ? '청구 금액 (협상가)' : '예상 청구액'}
+            </p>
             <p className="text-lg font-bold text-blue-600">
               {calculatePrice().toLocaleString()}원
             </p>
+            {workType === 'interior_only' && (
+              <p className="text-xs text-orange-600 mt-1">실내 전용 작업</p>
+            )}
           </div>
 
           {/* 메모 */}
@@ -274,23 +309,25 @@ export default function CompletionModal({
               <p className="text-xs text-red-600">{error}</p>
             </div>
           )}
-        </form>
+        </div>
 
         {/* 푸터 */}
         <div className="border-t border-gray-200 p-4 flex gap-2 sticky bottom-0 bg-white">
           <button
+            type="button"
             onClick={onClose}
             className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             취소
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
-            disabled={loading || (workerOption === 'other' && !selectedWorker)}
+            disabled={loading || workers.length === 0 || !selectedWorkerId}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
-              <>로딩...</>
+              <span>처리 중...</span>
             ) : (
               <>
                 <Check size={16} />

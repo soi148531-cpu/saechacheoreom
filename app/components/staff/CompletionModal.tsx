@@ -28,6 +28,14 @@ interface Worker {
   status: string
 }
 
+type WorkType = 'exterior' | 'interior_only' | 'both'
+
+const WORK_TYPE_LABELS: Record<WorkType, string> = {
+  exterior: '외부 세차',
+  interior_only: '실내 전용',
+  both: '외부 + 실내 세차',
+}
+
 export default function CompletionModal({
   isOpen,
   onClose,
@@ -43,7 +51,8 @@ export default function CompletionModal({
   const [completedTime, setCompletedTime] = useState<string>(
     new Date().toTimeString().slice(0, 5)
   )
-  const [hasInterior, setHasInterior] = useState(false)
+  const [workType, setWorkType] = useState<WorkType>('exterior')
+  const [interiorOnlyPrice, setInteriorOnlyPrice] = useState<number>(20000)
   const [memo, setMemo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -66,31 +75,45 @@ export default function CompletionModal({
 
     if (isOpen) {
       fetchWorkers()
+      setWorkType('exterior')
+      setInteriorOnlyPrice(20000)
     }
   }, [isOpen])
 
   // 가격 계산
   const calculatePrice = () => {
-    const basePrice = vehicle.unit_price
-    return hasInterior ? basePrice + 10000 : basePrice
+    if (workType === 'exterior') return vehicle.unit_price
+    if (workType === 'both') return vehicle.unit_price + 10000
+    return interiorOnlyPrice
+  }
+
+  // service_type 매핑
+  const getServiceType = () => {
+    if (workType === 'both') return 'interior'
+    if (workType === 'interior_only') return 'interior_only'
+    return 'regular'
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (workType === 'interior_only' && interiorOnlyPrice <= 0) {
+      setError('실내 작업 금액을 입력해주세요.')
+      return
+    }
+
     setLoading(true)
 
     try {
       const finalPrice = calculatePrice()
-      
+
       let worker_id: string | null = null
       let worked_by: 'worker' | 'admin'
 
       if (assignedTo === 'admin') {
         worked_by = 'admin'
       } else if (assignedTo === 'me') {
-        // "나"는 실제로는 로그인된 직원이 되어야 하는데,
-        // 현재는 직원 선택과 같음
         worker_id = selectedWorker
         worked_by = 'worker'
       } else {
@@ -106,7 +129,7 @@ export default function CompletionModal({
           schedule_id,
           wash_date: scheduled_date,
           price: finalPrice,
-          service_type: hasInterior ? 'interior' : 'regular',
+          service_type: getServiceType(),
           worker_id,
           worked_by,
           completed_at: new Date().toISOString(),
@@ -120,7 +143,6 @@ export default function CompletionModal({
         throw new Error(result.error || '완료 처리 실패')
       }
 
-      // 성공 콜백
       if (onSuccess) {
         onSuccess()
       }
@@ -160,6 +182,59 @@ export default function CompletionModal({
             <p className="text-xs text-gray-500 mt-1">
               예약일: {scheduled_date}
             </p>
+          </div>
+
+          {/* 작업 유형 */}
+          <div>
+            <label className="block text-sm font-medium mb-2">작업 유형</label>
+            <div className="space-y-2">
+              {(['exterior', 'interior_only', 'both'] as WorkType[]).map((type) => (
+                <label key={type} className="flex items-center">
+                  <input
+                    type="radio"
+                    name="work_type"
+                    value={type}
+                    checked={workType === type}
+                    onChange={() => setWorkType(type)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">{WORK_TYPE_LABELS[type]}</span>
+                  {type === 'exterior' && (
+                    <span className="text-xs text-gray-400 ml-2">
+                      ({vehicle.unit_price.toLocaleString()}원)
+                    </span>
+                  )}
+                  {type === 'both' && (
+                    <span className="text-xs text-gray-400 ml-2">
+                      ({vehicle.unit_price.toLocaleString()} + 10,000원)
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+
+            {/* 실내 전용 가격 입력 */}
+            {workType === 'interior_only' && (
+              <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <label className="block text-sm font-medium text-orange-800 mb-1">
+                  실내 작업 금액
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={interiorOnlyPrice}
+                    onChange={(e) => setInteriorOnlyPrice(Number(e.target.value))}
+                    className="w-full p-2 border border-orange-300 rounded-lg text-right"
+                    min={0}
+                    step={1000}
+                  />
+                  <span className="text-sm text-orange-700 whitespace-nowrap">원</span>
+                </div>
+                <p className="text-xs text-orange-600 mt-1">
+                  고객과 협상한 금액으로 변경하세요
+                </p>
+              </div>
+            )}
           </div>
 
           {/* 당번 선택 */}
@@ -230,32 +305,17 @@ export default function CompletionModal({
             />
           </div>
 
-          {/* 추가 작업 */}
-          <div>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={hasInterior}
-                onChange={(e) => setHasInterior(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm">
-                실내청소 (+10,000원)
-              </span>
-            </label>
-            {hasInterior && (
-              <p className="text-xs text-blue-600 mt-1">
-                금액: {vehicle.unit_price.toLocaleString()} + 10,000 = {calculatePrice().toLocaleString()}원
-              </p>
-            )}
-          </div>
-
           {/* 예상 청구액 */}
           <div className="bg-gray-50 p-3 rounded-lg">
-            <p className="text-sm text-gray-600">예상 청구액</p>
+            <p className="text-sm text-gray-600">
+              {workType === 'interior_only' ? '청구 금액 (협상가)' : '예상 청구액'}
+            </p>
             <p className="text-lg font-bold">
               {calculatePrice().toLocaleString()}원
             </p>
+            {workType === 'interior_only' && (
+              <p className="text-xs text-orange-600 mt-1">실내 전용 작업</p>
+            )}
           </div>
 
           {/* 메모 */}

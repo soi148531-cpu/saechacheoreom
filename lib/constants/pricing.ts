@@ -42,6 +42,15 @@ export const ONETIME_PRICE_TABLE: Record<CarGrade, number> = {
 
 export const INTERIOR_PRICE = 10000
 
+// 작업자 급여 계산 기준
+export const WORKER_RATES = {
+  OUTDOOR: 10000,    // 실외세차 1건당 (누구든)
+  INDOOR: 10000,     // 실내청소 추가비 (누구든)
+}
+
+// 호환성 유지
+export const WORKER_BASE_RATE = WORKER_RATES.OUTDOOR
+
 // 월 정가 조회
 export function getMonthlyPrice(grade: CarGrade, monthlyCount: MonthlyCount): number {
   if (monthlyCount === 'onetime') return ONETIME_PRICE_TABLE[grade]

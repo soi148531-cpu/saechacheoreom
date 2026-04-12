@@ -1,105 +1,105 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* V5: REST API ONLY - No Supabase Client Library */
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/supabase/client'
 
-/**
- * GET /api/payroll/[id]/details
- * 정산 상세 정보 및 해당 월의 세차 기록 조회
- */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+const URL = 'https://zzeyflxnmolfoqrvlxwc.supabase.co'
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6ZXlmbHhubW9sZm9xcnZseHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NTc2ODIsImV4cCI6MjA5MDMzMzY4Mn0.CKDa59JyhsyjF232I2S5uKrQ5sbvBFFx4y3hr7id7I8'
+
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = db()
-    const { id } = params
-
-    // 1. 정산 데이터 조회
-    const { data: payroll, error: payrollError } = await supabase
-      .from('worker_payrolls')
-      .select('*')
-      .eq('id', id)
-      .single() as any
-
-    if (payrollError || !payroll) {
-      return NextResponse.json(
-        { success: false, error: '정산 기록을 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
-
-    // 2. 직원 정보 조회
-    const { data: worker } = (await supabase
-      .from('workers')
-      .select('id, name, phone, status')
-      .eq('id', (payroll as any).worker_id)
-      .single()) as any
-
-    // 3. 해당 월의 세차 기록 조회
-    const [year, month] = (payroll as any).year_month.split('-')
+    const id = params.id
+    const headers = { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+    
+    // 1. Get payroll by id
+    const pResp = await fetch(`${URL}/rest/v1/worker_payrolls?id=eq.${id}`, { headers })
+    const payrolls = await pResp.json()
+    if (!payrolls || !payrolls[0]) return NextResponse.json({ error: 'Payroll not found' }, { status: 404 })
+    const payroll = payrolls[0]
+    
+    // 2. Get worker info
+    const wResp = await fetch(`${URL}/rest/v1/workers?id=eq.${payroll.worker_id}`, { headers })
+    const workers = await wResp.json()
+    const worker = workers?.[0]
+    const workerName = worker?.name
+    
+    // 3. Get wash records for this worker and period
+    const [year, month] = payroll.year_month.split('-')
     const nextMonth = String(parseInt(month) + 1).padStart(2, '0')
-    const nextYear = parseInt(month) === 12 ? String(parseInt(year) + 1) : year
-
-    const { data: washRecords, error: washError } = await supabase
-      .from('wash_records')
-      .select(
-        `id, 
-        wash_date, 
-        price, 
-        service_type,
-        vehicle:vehicles(id, vehicle_name, license_plate),
-        customer:customers(id, name)`
-      )
-      .eq('worker_id', (payroll as any).worker_id)
-      .eq('worked_by', 'worker')
-      .gte('wash_date', `${(payroll as any).year_month}-01`)
-      .lt('wash_date', `${nextYear}-${nextMonth}-01`)
-      .order('wash_date', { ascending: false })
-
-    if (washError) {
-      console.error('세차 기록 조회 에러:', washError)
-    }
-
-    // 4. 응답 구성
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detailedWashRecords = (washRecords || []).map((record: any) => ({
-      id: record.id,
-      date: record.wash_date,
-      vehicle_name: record.vehicle?.vehicle_name || 'Unknown',
-      license_plate: record.vehicle?.license_plate || 'Unknown',
-      customer_name: record.customer?.name || 'Unknown',
-      price: record.price,
-      service_type: record.service_type
-    }))
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        worker: {
-          id: (worker as any)?.id,
-          name: (worker as any)?.name,
-          phone: (worker as any)?.phone,
-          status: (worker as any)?.status
-        },
-        payroll: {
-          id: (payroll as any).id,
-          year_month: (payroll as any).year_month,
-          total_washes: (payroll as any).total_washes,
-          total_amount: (payroll as any).total_amount,
-          bonus_amount: (payroll as any).bonus_amount,
-          paid_amount: (payroll as any).paid_amount,
-          paid_at: (payroll as any).paid_at,
-          memo: (payroll as any).memo,
-          status: (payroll as any).paid_at ? 'paid' : 'unpaid'
-        },
-        wash_records: detailedWashRecords
+    const nextYear = month === '12' ? String(parseInt(year) + 1) : year
+    
+    // Use raw REST API URL with filters
+    const wrUrl = `${URL}/rest/v1/wash_records?select=id,wash_date,service_type,vehicle_id,created_at&completed_by=eq.${encodeURIComponent(workerName)}&wash_date=gte.${year}-${month}-01&wash_date=lt.${nextYear}-${nextMonth}-01&order=created_at.desc`
+    const wrResp = await fetch(wrUrl, { headers })
+    const washRecords = await wrResp.json()
+    
+    // 4. Deduplicate (keep latest per date+vehicle)
+    const deduped = new Map()
+    washRecords?.forEach((r: any) => {
+      const key = `${r.wash_date}|${r.vehicle_id}`
+      if (!deduped.has(key) || new Date(r.created_at) > new Date(deduped.get(key).created_at)) {
+        deduped.set(key, r)
       }
     })
-  } catch (error) {
-    console.error('GET /api/payroll/[id]/details 에러:', error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '서버 오류' },
-      { status: 500 }
-    )
+    const dedupedArray = Array.from(deduped.values())
+    
+    // 5. Get vehicle details
+    if (dedupedArray.length === 0) {
+      return NextResponse.json({
+        success: true,
+        _version: 'v5-rest-api',
+        data: {
+          worker: { id: worker?.id, name: worker?.name },
+          payroll: {
+            id: payroll.id,
+            year_month: payroll.year_month,
+            total_washes: 0,
+            outdoor_wash_count: 0,
+            indoor_wash_count: 0,
+            total_amount: 0,
+          },
+          wash_records: []
+        }
+      })
+    }
+    
+    const vehicleIds = Array.from(new Set(dedupedArray.map((r: any) => r.vehicle_id)))
+    const vResp = await fetch(`${URL}/rest/v1/vehicles?select=id,car_name,plate_number&id=in.(${vehicleIds.join(',')})`, { headers })
+    const vehicles = await vResp.json()
+    const vehicleMap: Map<string, any> = new Map(vehicles?.map((v: any) => [v.id, v]) || [])
+    
+    // 6. Format response
+    const detailed = dedupedArray.map((r: any) => ({
+      id: r.id,
+      date: r.wash_date,
+      carName: vehicleMap.get(r.vehicle_id)?.car_name || 'Unknown',
+      plateNumber: vehicleMap.get(r.vehicle_id)?.plate_number || 'Unknown',
+      hasInteriorCleaning: r.service_type?.includes('interior'),
+      serviceType: r.service_type
+    }))
+    
+    const outdoor = detailed.length
+    const indoor = detailed.filter((r: any) => r.hasInteriorCleaning).length
+    
+    return NextResponse.json({
+      success: true,
+      _version: 'v5-rest-api',
+      data: {
+        worker: { id: worker?.id, name: worker?.name, phone: worker?.phone },
+        payroll: {
+          id: payroll.id,
+          year_month: payroll.year_month,
+          total_washes: payroll.total_washes,
+          outdoor_wash_count: outdoor,
+          indoor_wash_count: indoor,
+          total_amount: payroll.total_amount,
+          bonus_amount: payroll.bonus_amount || 0,
+          paid_amount: payroll.paid_amount || payroll.total_amount,
+          memo: payroll.memo
+        },
+        wash_records: detailed
+      }
+    })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) })
   }
 }

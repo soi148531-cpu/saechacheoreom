@@ -1,11 +1,15 @@
 ﻿'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, Copy, Edit2, Save, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, Copy, Edit2, Save, Search, TrendingUp } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
-import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, Customer } from '@/types'
+import { MessageBadge } from '@/components/MessageBadge'
+import { MessageButton } from '@/components/MessageButton'
+import { updateMessageSentAt } from '@/lib/services/messageService'
+import { filterMessageStatus } from '@/lib/services/messageService'
+import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, PaymentMethod, Customer, MessageFilter } from '@/types'
 
 interface VehicleBilling {
   vehicle: Vehicle
@@ -16,6 +20,10 @@ interface VehicleBilling {
   totalAmount: number
   paymentStatus: PaymentStatus
   paidAmount: number
+  paidAt: string | null
+  paymentMethod: PaymentMethod
+  sentAt: string | null
+  messageSentAt: string | null
   billingId: string | null
 }
 
@@ -29,12 +37,133 @@ interface CustomerBilling {
   memo: string | null
 }
 
+interface BillingStats {
+  totalBillingAmount: number
+  totalPaidAmount: number
+  unpaidAmount: number
+  unpaidCount: number
+  partialCount: number
+  paidCount: number
+  paymentRate: number
+  totalRecords: number
+}
+
 interface NewItem { name: string; price: string; qty: string }
+
+// 통계 계산 함수
+function calculateBillingStats(customers: CustomerBilling[]): BillingStats {
+  let totalBillingAmount = 0
+  let totalPaidAmount = 0
+  let unpaidCount = 0
+  let partialCount = 0
+  let paidCount = 0
+  let totalRecords = 0
+
+  customers.forEach(cb => {
+    cb.vehicles.forEach(vb => {
+      totalBillingAmount += vb.totalAmount
+      totalPaidAmount += vb.paidAmount
+      totalRecords += vb.records.length
+
+      if (vb.paymentStatus === 'paid') paidCount++
+      else if (vb.paymentStatus === 'partial') partialCount++
+      else unpaidCount++
+    })
+  })
+
+  const unpaidAmount = totalBillingAmount - totalPaidAmount
+  const paymentRate = totalBillingAmount > 0 ? (totalPaidAmount / totalBillingAmount) * 100 : 0
+
+  return {
+    totalBillingAmount,
+    totalPaidAmount,
+    unpaidAmount,
+    unpaidCount,
+    partialCount,
+    paidCount,
+    paymentRate,
+    totalRecords,
+  }
+}
+
+// 통계 카드 컴포넌트
+function BillingStatistics({ stats, yearMonth }: { stats: BillingStats; yearMonth: string }) {
+  const [y, m] = yearMonth.split('-')
+  const monthDisplay = `${y}년 ${parseInt(m)}월`
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 shadow-sm">
+      {/* 월 표시 */}
+      <div className="mb-4">
+        <p className="text-sm text-gray-500">{monthDisplay} 청구 현황</p>
+      </div>
+
+      {/* 3열 통계 카드 */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {/* 총 청구액 */}
+        <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+          <p className="text-xs text-gray-600 mb-1">총 청구액</p>
+          <p className="text-lg font-bold text-blue-900">{formatPrice(stats.totalBillingAmount)}</p>
+        </div>
+
+        {/* 실제 입금액 - HIGHLIGHT */}
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border-2 border-green-500 shadow-md">
+          <p className="text-xs text-gray-600 mb-1 font-semibold">실제 입금액</p>
+          <p className="text-lg font-bold text-green-700">{formatPrice(stats.totalPaidAmount)}</p>
+          <p className="text-xs text-green-600 mt-1 font-medium">입금완료: {stats.paidCount}대</p>
+        </div>
+
+        {/* 미입금액 */}
+        <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+          <p className="text-xs text-gray-600 mb-1">미입금액</p>
+          <p className="text-lg font-bold text-red-900">{formatPrice(stats.unpaidAmount)}</p>
+          <p className="text-xs text-red-600 mt-1">미입금: {stats.unpaidCount}대 / 부분납: {stats.partialCount}대</p>
+        </div>
+      </div>
+
+      {/* 입금률 진행 바 */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-semibold text-gray-700">입금 진행률</p>
+          <p className="text-sm font-bold text-green-600">{stats.paymentRate.toFixed(1)}%</p>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div
+            className="bg-gradient-to-r from-green-400 to-green-600 h-2.5 rounded-full transition-all"
+            style={{ width: `${Math.min(stats.paymentRate, 100)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* 세차 실적 */}
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-600">이달 세차 실적</span>
+        <span className="font-bold text-gray-900 flex items-center gap-1">
+          <TrendingUp size={14} className="text-green-600" />
+          {stats.totalRecords}건
+        </span>
+      </div>
+    </div>
+  )
+}
 
 const STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string; icon: typeof CheckCircle }> = {
   paid:    { label: '입금완료', color: 'text-green-600 bg-green-50',   icon: CheckCircle },
   partial: { label: '부분납',   color: 'text-yellow-600 bg-yellow-50', icon: AlertCircle },
   unpaid:  { label: '미입금',   color: 'text-red-600 bg-red-50',      icon: Clock },
+}
+
+function StatusBadge({ vb }: { vb: VehicleBilling }) {
+  const cfg = STATUS_CONFIG[vb.paymentStatus]
+  const Icon = cfg.icon
+  const label = vb.paymentStatus === 'partial' && vb.paidAmount > 0
+    ? `부분납 ${vb.paidAmount.toLocaleString()}원`
+    : cfg.label
+  return (
+    <span className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${cfg.color}`}>
+      <Icon size={11} />{label}
+    </span>
+  )
 }
 
 export default function BillingPage() {
@@ -49,6 +178,12 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [editingMemo, setEditingMemo] = useState<Record<string, string>>({})
   const [savingMemo,  setSavingMemo]  = useState<Record<string, boolean>>({})
+  const [partialInput, setPartialInput] = useState<Record<string, string>>({}) // vehicleId → 입력금액
+  const [paymentModal, setPaymentModal] = useState<VehicleBilling | null>(null)
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card' | 'cash_receipt'>('all')
+  const [messageFilter, setMessageFilter] = useState<MessageFilter>('all')
+  const [modalPaymentDate, setModalPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [modalPaymentMethod, setModalPaymentMethod] = useState<'cash' | 'card' | 'cash_receipt'>('cash')
 
   // localStorage에서 고객 메모 로드/저장
   const getMemoKey = (customerId: string) => `billing_memo:${yearMonth}:${customerId}`
@@ -85,7 +220,7 @@ export default function BillingPage() {
 
     const vehicles = (vRes.data ?? []) as Array<Vehicle & { customer: Customer }>
     const records = (rRes.data ?? []) as WashRecord[]
-    const billings = (bRes.data ?? []) as Array<Billing & { items?: BillingItem[] }>
+    const billings = (bRes.data ?? []) as any[]
 
     // 차량별 청구 정보 구성 (종료/정지/세차없는 차량 제외)
     const vehicleBillings: Record<string, VehicleBilling> = {}
@@ -109,6 +244,10 @@ export default function BillingPage() {
         totalAmount: washTotal + extraTotal,
         paymentStatus: billing?.payment_status ?? 'unpaid',
         paidAmount: billing?.paid_amount ?? 0,
+        paidAt: billing?.paid_at ?? null,
+        paymentMethod: (billing?.payment_method as PaymentMethod) ?? null,
+        sentAt: billing?.sent_at ?? null,
+        messageSentAt: billing?.message_sent_at ?? null,
         billingId: billing?.id ?? null,
       }
     })
@@ -149,19 +288,36 @@ export default function BillingPage() {
     setYearMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
-  // 검색 필터링
+  // 검색 + 결제수단 필터링 + 메시지 필터링
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return allCustomers
-    const q = searchQuery.toLowerCase()
-    return allCustomers.filter(cb => {
-      const matchCustomer = cb.customer.name?.toLowerCase().includes(q) || cb.customer.phone?.includes(q)
-      const matchVehicle = cb.vehicles.some(vb =>
-        vb.vehicle.car_name?.toLowerCase().includes(q) ||
-        vb.vehicle.plate_number?.toLowerCase().includes(q)
-      )
-      return matchCustomer || matchVehicle
-    })
-  }, [allCustomers, searchQuery])
+    let result = allCustomers
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(cb => {
+        const matchCustomer = cb.customer.name?.toLowerCase().includes(q) || cb.customer.phone?.includes(q)
+        const matchVehicle = cb.vehicles.some(vb =>
+          vb.vehicle.car_name?.toLowerCase().includes(q) ||
+          vb.vehicle.plate_number?.toLowerCase().includes(q)
+        )
+        return matchCustomer || matchVehicle
+      })
+    }
+    if (paymentFilter !== 'all') {
+      result = result
+        .map(cb => ({ ...cb, vehicles: cb.vehicles.filter(vb => vb.paymentMethod === paymentFilter) }))
+        .filter(cb => cb.vehicles.length > 0)
+    }
+    if (messageFilter !== 'all') {
+      result = result
+        .map(cb => ({ ...cb, vehicles: cb.vehicles.filter(vb => {
+          if (messageFilter === 'sent') return vb.messageSentAt !== null
+          if (messageFilter === 'unsent') return vb.messageSentAt === null
+          return true
+        }) }))
+        .filter(cb => cb.vehicles.length > 0)
+    }
+    return result
+  }, [allCustomers, searchQuery, paymentFilter, messageFilter])
 
   async function ensureBilling(vb: VehicleBilling): Promise<string> {
     if (vb.billingId) return vb.billingId
@@ -180,16 +336,23 @@ export default function BillingPage() {
     return data?.id
   }
 
-  async function updatePaymentStatus(vb: VehicleBilling, status: PaymentStatus) {
+  async function updatePaymentStatus(vb: VehicleBilling, status: PaymentStatus, customPaidAmount?: number, paidAt?: string | null, payMethod?: PaymentMethod) {
+    const paidAmount = status === 'paid'
+      ? vb.totalAmount
+      : status === 'partial'
+        ? (customPaidAmount ?? vb.paidAmount)
+        : 0
+    const updateData: Record<string, unknown> = {
+      payment_status: status,
+      paid_amount: paidAmount,
+      total_amount: vb.totalAmount,
+      wash_count: vb.records.length,
+    }
+    if (paidAt !== undefined) updateData.paid_at = paidAt
+    if (payMethod !== undefined) updateData.payment_method = payMethod
+
     if (vb.billingId) {
-      await db().from('billings')
-        .update({
-          payment_status: status,
-          paid_amount: status === 'paid' ? vb.totalAmount : vb.paidAmount,
-          total_amount: vb.totalAmount,
-          wash_count: vb.records.length,
-        })
-        .eq('id', vb.billingId)
+      await db().from('billings').update(updateData).eq('id', vb.billingId)
     } else {
       await db().from('billings').insert({
         vehicle_id: vb.vehicle.id,
@@ -197,10 +360,32 @@ export default function BillingPage() {
         wash_count: vb.records.length,
         total_amount: vb.totalAmount,
         payment_status: status,
-        paid_amount: status === 'paid' ? vb.totalAmount : 0,
+        paid_amount: paidAmount,
+        ...(paidAt !== undefined ? { paid_at: paidAt } : {}),
+        ...(payMethod !== undefined ? { payment_method: payMethod } : {}),
       })
     }
     fetchBilling()
+  }
+
+  function openPaymentModal(vb: VehicleBilling) {
+    setPaymentModal(vb)
+    setModalPaymentDate(new Date().toISOString().split('T')[0])
+    setModalPaymentMethod('cash')
+  }
+
+  async function confirmPaymentModal() {
+    if (!paymentModal) return
+    await updatePaymentStatus(paymentModal, 'paid', undefined, modalPaymentDate, modalPaymentMethod)
+    setPaymentModal(null)
+  }
+
+  async function confirmPartial(vb: VehicleBilling) {
+    const raw = partialInput[vb.vehicle.id] ?? ''
+    const amount = parseInt(raw.replace(/,/g, ''), 10)
+    if (isNaN(amount) || amount <= 0) return
+    setPartialInput(prev => { const n = { ...prev }; delete n[vb.vehicle.id]; return n })
+    await updatePaymentStatus(vb, 'partial', amount)
   }
 
   async function addItem(vb: VehicleBilling, name: string, price: number, qty: number) {
@@ -233,9 +418,23 @@ export default function BillingPage() {
   async function saveMemo(customerId: string) {
     const memo = editingMemo[customerId] ?? ''
     setSavingMemo(prev => ({ ...prev, [customerId]: true }))
+
+    // localStorage + DB 함께 저장
     saveMemoToStorage(customerId, memo)
-    // 로컬 데이터 업데이트
-    setAllCustomers(prev => prev.map(cb => 
+    const customer = allCustomers.find(c => c.customerId === customerId)
+    if (customer) {
+      customer.vehicles.forEach(vb => {
+        if (vb.billingId) {
+          db().from('billings')
+            .update({ memo })
+            .eq('id', vb.billingId)
+            .catch((err: unknown) => console.error('메모 저장 실패:', err))
+        }
+      })
+    }
+
+    // 로컬 UI 업데이트
+    setAllCustomers(prev => prev.map(cb =>
       cb.customerId === customerId ? { ...cb, memo } : cb
     ))
     setEditingMemo(prev => {
@@ -295,9 +494,54 @@ export default function BillingPage() {
     alert('클립보드에 복사되었습니다. 카카오톡에 붙여넣기 하세요.')
   }
 
+  async function handleMessageUpdate(billingId: string) {
+    // 단일 항목만 새로고침 (효율성)
+    const { data } = await supabase
+      .from('billings')
+      .select('*')
+      .eq('id', billingId)
+      .single()
+
+    if (!data) return
+
+    // allCustomers 배열 업데이트
+    setAllCustomers(prev => prev.map(cb => ({
+      ...cb,
+      vehicles: cb.vehicles.map(vb => {
+        if (vb.billingId === billingId) {
+          return { ...vb, messageSentAt: (data as any).message_sent_at }
+        }
+        return vb
+      })
+    })))
+  }
+
+  const PAYMENT_METHOD_LABELS: Record<string, string> = {
+    cash: '현금',
+    card: '카드',
+    cash_receipt: '현금영수증',
+  }
+
+  function copyTaxData() {
+    const rows: string[] = ['입금날짜\t고객명\t금액\t증빙\t카톡발송']
+    filteredCustomers.forEach(cb => {
+      cb.vehicles.forEach(vb => {
+        if (vb.paymentStatus !== 'paid') return
+        const date = vb.paidAt ? new Date(vb.paidAt) : null
+        const dateStr = date ? `${date.getMonth() + 1}/${date.getDate()}` : '-'
+        const methodStr = vb.paymentMethod ? (PAYMENT_METHOD_LABELS[vb.paymentMethod] ?? vb.paymentMethod) : '-'
+        const sentStr = vb.sentAt ? (() => { const d = new Date(vb.sentAt!); return `${d.getMonth()+1}/${d.getDate()}` })() : '-'
+        rows.push(`${dateStr}\t${cb.customer.name}\t${vb.paidAmount}\t${methodStr}\t${sentStr}`)
+      })
+    })
+    navigator.clipboard.writeText(rows.join('\n'))
+    alert(`${rows.length - 1}건 복사됨. 구글 스프레드시트에 붙여넣기 하세요.`)
+  }
+
   const totalCustomers = filteredCustomers.length
   const totalUnpaid = filteredCustomers.reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus !== 'paid').length, 0)
   const totalPaid = filteredCustomers.reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus === 'paid').length, 0)
+  const billingStats = useMemo(() => calculateBillingStats(allCustomers), [allCustomers])
 
   return (
     <div className="p-4 max-w-3xl mx-auto pb-24">
@@ -317,8 +561,11 @@ export default function BillingPage() {
         </div>
       </div>
 
+      {/* 통계 대시보드 */}
+      <BillingStatistics stats={billingStats} yearMonth={yearMonth} />
+
       {/* 검색 */}
-      <div className="relative mb-4">
+      <div className="relative mb-3">
         <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
         <input
           type="text"
@@ -327,6 +574,53 @@ export default function BillingPage() {
           onChange={e => setSearchQuery(e.target.value)}
           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      {/* 결제수단 필터 탭 + 메시지 필터 탭 + 세금 복사 */}
+      <div className="mb-4 space-y-2">
+        {/* 결제수단 필터 */}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 flex-1">
+            {([['all', '전체'], ['cash', '현금'], ['card', '카드'], ['cash_receipt', '현금영수증']] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setPaymentFilter(val)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${
+                  paymentFilter === val
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={copyTaxData}
+            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium"
+            title="입금완료 건 스프레드시트용 복사"
+          >
+            <Copy size={13} />
+            세금신고 복사
+          </button>
+        </div>
+
+        {/* 메시지 필터 탭 */}
+        <div className="flex gap-1">
+          {([['all', '전체'], ['sent', '발송완료'], ['unsent', '미발송']] as const).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setMessageFilter(val)}
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${
+                messageFilter === val
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 요약 카드 */}
@@ -439,8 +733,6 @@ export default function BillingPage() {
                     <div className="space-y-3">
                       {cb.vehicles.map(vb => {
                         const v = vb.vehicle
-                        const cfg = STATUS_CONFIG[vb.paymentStatus]
-                        const Icon = cfg.icon
                         const isVehicleSelected = selectedVehicleId === v.id
                         const isAdding = showAddForm === v.id
                         const newItem = addingItem[v.id] ?? { name: '', price: '', qty: '1' }
@@ -463,11 +755,32 @@ export default function BillingPage() {
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                                 <span className="font-semibold text-gray-900 text-sm">{formatPrice(vb.totalAmount)}</span>
-                                <span className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${cfg.color}`}>
-                                  <Icon size={11} />{cfg.label}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  <StatusBadge vb={vb} />
+                                  <MessageBadge messageSentAt={vb.messageSentAt} />
+                                </div>
                               </div>
                             </button>
+                            {/* 입금 요약 정보 — 항상 표시 */}
+                            <div className="px-3 pb-2 flex gap-3 text-xs text-gray-500 flex-wrap">
+                              {vb.paidAt ? (
+                                <span className="text-green-700 font-medium">
+                                  입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">입금일 미기록</span>
+                              )}
+                              {vb.paymentMethod ? (
+                                <span className="font-medium text-gray-700">{PAYMENT_METHOD_LABELS[vb.paymentMethod] ?? vb.paymentMethod}</span>
+                              ) : (
+                                <span className="text-gray-400">증빙 미선택</span>
+                              )}
+                              {vb.sentAt ? (
+                                <span className="text-blue-600">카톡 {(() => { const d = new Date(vb.sentAt!); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })()}</span>
+                              ) : (
+                                <span className="text-gray-400">카톡 미발송</span>
+                              )}
+                            </div>
 
                             {/* 차량 상세 */}
                             {isVehicleSelected && (
@@ -478,13 +791,16 @@ export default function BillingPage() {
                                   <div className="space-y-1">
                                     {vb.records.map(r => {
                                       const d = new Date(r.wash_date)
-                                      const basePrice = v.unit_price ?? 0
-                                      const interiorAmt = r.price - basePrice
                                       return (
                                         <div key={r.id} className="flex justify-between text-sm bg-white rounded px-2 py-1">
-                                          <span className="text-gray-600">
+                                          <span className="text-gray-600 flex items-center gap-1">
                                             {d.getMonth() + 1}/{d.getDate()}
-                                            {interiorAmt > 0 && <span className="ml-1 text-purple-600">(실내)</span>}
+                                            {r.service_type === 'interior_only' && (
+                                              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">실내전용</span>
+                                            )}
+                                            {r.service_type === 'interior' && (
+                                              <span className="text-xs text-purple-600">(+실내)</span>
+                                            )}
                                           </span>
                                           <span className="font-medium text-gray-900">{formatPrice(r.price)}</span>
                                         </div>
@@ -564,6 +880,39 @@ export default function BillingPage() {
                                       </button>
                                     </div>
                                   </div>
+                                ) : partialInput[v.id] !== undefined ? (
+                                  // 부분납 금액 입력 패널
+                                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
+                                    <p className="text-xs font-semibold text-yellow-800">부분납 금액 입력</p>
+                                    <div className="flex items-center gap-2">
+                                      <div className="relative flex-1">
+                                        <input
+                                          type="number"
+                                          placeholder="입금받은 금액"
+                                          value={partialInput[v.id]}
+                                          onChange={e => setPartialInput(prev => ({ ...prev, [v.id]: e.target.value }))}
+                                          onKeyDown={e => { if (e.key === 'Enter') confirmPartial(vb) }}
+                                          className="w-full border border-yellow-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                                          autoFocus
+                                        />
+                                        <span className="absolute right-2 top-1.5 text-xs text-gray-400">원</span>
+                                      </div>
+                                      <button
+                                        onClick={() => confirmPartial(vb)}
+                                        disabled={!partialInput[v.id]}
+                                        className="bg-yellow-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-yellow-600 disabled:opacity-40"
+                                      >
+                                        확인
+                                      </button>
+                                      <button
+                                        onClick={() => setPartialInput(prev => { const n = { ...prev }; delete n[v.id]; return n })}
+                                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5"
+                                      >
+                                        취소
+                                      </button>
+                                    </div>
+                                    <p className="text-xs text-yellow-700">전체 청구: {formatPrice(vb.totalAmount)}</p>
+                                  </div>
                                 ) : (
                                   <div className="flex gap-1">
                                     <button
@@ -573,19 +922,31 @@ export default function BillingPage() {
                                       <Plus size={14} />
                                       항목 추가
                                     </button>
-                                    {['paid', 'unpaid', 'partial'].map(status => (
-                                      <button
-                                        key={status}
-                                        onClick={() => updatePaymentStatus(vb, status as PaymentStatus)}
-                                        className="text-xs px-2 py-1 rounded font-medium border transition-colors"
-                                        style={{
-                                          borderColor: STATUS_CONFIG[status as PaymentStatus].color.split(' ')[0].replace('text-', 'border-').replace('600', '300'),
-                                          color: STATUS_CONFIG[status as PaymentStatus].color.split(' ')[0].replace('text-', 'text-').replace('bg-', ''),
-                                        }}
-                                      >
-                                        {STATUS_CONFIG[status as PaymentStatus].label}
-                                      </button>
-                                    ))}
+                                    {vb.billingId && (
+                                      <MessageButton
+                                        billingId={vb.billingId}
+                                        messageSentAt={vb.messageSentAt}
+                                        onUpdate={handleMessageUpdate}
+                                      />
+                                    )}
+                                    <button
+                                      onClick={() => openPaymentModal(vb)}
+                                      className="text-xs px-2 py-1 rounded font-medium border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
+                                    >
+                                      입금완료
+                                    </button>
+                                    <button
+                                      onClick={() => setPartialInput(prev => ({ ...prev, [v.id]: String(vb.paidAmount || '') }))}
+                                      className="text-xs px-2 py-1 rounded font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors"
+                                    >
+                                      부분납
+                                    </button>
+                                    <button
+                                      onClick={() => updatePaymentStatus(vb, 'unpaid')}
+                                      className="text-xs px-2 py-1 rounded font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                      미입금
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -599,6 +960,58 @@ export default function BillingPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* 입금 처리 모달 */}
+      {paymentModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl">
+            <h2 className="text-base font-bold text-gray-900 mb-1">입금 처리</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              {paymentModal.vehicle.car_name} · {formatPrice(paymentModal.totalAmount)}
+            </p>
+
+            <label className="block text-xs font-semibold text-gray-700 mb-1">입금 날짜</label>
+            <input
+              type="date"
+              value={modalPaymentDate}
+              onChange={e => setModalPaymentDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+
+            <label className="block text-xs font-semibold text-gray-700 mb-2">증빙 종류</label>
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              {([['cash', '현금'], ['card', '카드'], ['cash_receipt', '현금영수증']] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setModalPaymentMethod(val)}
+                  className={`py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    modalPaymentMethod === val
+                      ? 'bg-green-600 text-white border-green-600'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPaymentModal(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={confirmPaymentModal}
+                className="flex-1 py-2.5 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700"
+              >
+                입금완료
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

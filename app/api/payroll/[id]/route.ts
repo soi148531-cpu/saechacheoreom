@@ -15,7 +15,7 @@ export async function PUT(
     const { id } = params
     const body = await request.json()
 
-    // paid_at, memo, bonus_amount 중 필요한 것만 업데이트
+    // paid_at, memo, bonus_amount, paid_amount 중 필요한 것만 업데이트
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {}
 
@@ -38,6 +38,9 @@ export async function PUT(
       if (payroll) {
         updateData.paid_amount = (payroll as any).total_amount + body.bonus_amount
       }
+    }
+    if (body.paid_amount !== undefined) {
+      updateData.paid_amount = body.paid_amount
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -95,8 +98,8 @@ export async function PUT(
 }
 
 /**
- * DELETE /api/payroll/[id]/payment
- * 지급 처리 취소 (paid_at 초기화)
+ * DELETE /api/payroll/[id]
+ * 정산 기록 삭제
  */
 export async function DELETE(
   request: NextRequest,
@@ -106,33 +109,24 @@ export async function DELETE(
     const supabase = db()
     const { id } = params
 
-    // paid_at을 NULL로 초기화
-    const { data: updated, error: updateError } = (await supabase
+    // 정산 기록 삭제
+    const { error: deleteError } = await supabase
       .from('worker_payrolls')
-      .update({
-        paid_at: null
-      })
+      .delete()
       .eq('id', id)
-      .select()) as any
 
-    if (updateError) {
+    if (deleteError) {
+      console.error('❌ 정산 삭제 실패:', deleteError)
       return NextResponse.json(
-        { success: false, error: updateError.message },
+        { success: false, error: deleteError.message },
         { status: 500 }
       )
     }
 
-    if (!updated || updated.length === 0) {
-      return NextResponse.json(
-        { success: false, error: '정산 기록을 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
-
+    console.log('✅ 정산 기록 삭제 성공:', id)
     return NextResponse.json({
       success: true,
-      data: updated[0],
-      message: '지급 처리가 취소되었습니다'
+      message: '정산 기록이 삭제되었습니다'
     })
   } catch (error) {
     console.error('DELETE /api/payroll/[id] 에러:', error)

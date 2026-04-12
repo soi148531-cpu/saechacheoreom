@@ -34,6 +34,7 @@ export interface Vehicle {
   monthly_count: MonthlyCount
   monthly_price: number | null
   unit_price: number | null
+  custom_price: number | null
   start_date: string
   end_date: string | null
   status: VehicleStatus
@@ -63,7 +64,7 @@ export interface WashRecord {
   schedule_id: string | null
   wash_date: string
   price: number
-  service_type: 'regular' | 'onetime' | 'interior'
+  service_type: 'regular' | 'onetime' | 'interior' | 'interior_only'
   is_completed: boolean
   completed_at: string | null
   memo: string | null
@@ -94,6 +95,8 @@ export interface StaffPhoto {
   created_at: string
 }
 
+export type PaymentMethod = 'cash' | 'card' | 'cash_receipt' | null
+
 export interface Billing {
   id: string
   vehicle_id: string
@@ -104,6 +107,9 @@ export interface Billing {
   payment_status: PaymentStatus
   memo: string | null
   sent_at: string | null
+  paid_at: string | null
+  payment_method: PaymentMethod
+  message_sent_at: string | null
   created_at: string
   vehicle?: Vehicle
   items?: BillingItem[]
@@ -132,6 +138,8 @@ export interface WorkerPayroll {
   worker_id: string
   year_month: string
   total_washes: number
+  outdoor_wash_count?: number  // 실외세차 건수
+  indoor_wash_count?: number   // 실내청소 건수
   total_amount: number
   bonus_amount: number
   paid_amount: number
@@ -139,4 +147,14 @@ export interface WorkerPayroll {
   memo: string | null
   created_at: string
   worker?: Worker
+}
+
+export type MessageFilter = 'all' | 'sent' | 'unsent'
+
+export interface MessageTemplate {
+  id: string
+  template_key: string
+  message_body: string
+  created_at: string
+  updated_at: string
 }

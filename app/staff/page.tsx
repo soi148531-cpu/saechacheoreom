@@ -7,7 +7,9 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Camera, CheckCircle2, Circle, Upload, ChevronDown, ChevronUp, Home, Check, X, Sofa, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { createClient, db } from '@/lib/supabase/client'
-import { CAR_GRADE_LABELS, INTERIOR_PRICE } from '@/lib/constants/pricing'
+import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
+import { usePricing } from '@/lib/hooks/usePricing'
+import { getTodayKST } from '@/lib/utils/timezone'
 import CompletionModal from '@/components/staff/CompletionModal'
 import type { Vehicle, Schedule } from '@/types'
 
@@ -38,17 +40,38 @@ interface TaskItem {
 
 export default function StaffPage() {
   const supabase = createClient()
-  const today = new Date().toISOString().split('T')[0]
+  const { priceTable } = usePricing()
 
   const [tasks,   setTasks]   = useState<TaskItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [date,    setDate]    = useState(today)
+  const [date,    setDate]    = useState<string | null>(null)
   const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(null)
   const [savingKey, setSavingKey] = useState<string | null>(null)
   
   // CompletionModal state
   const [completionModalOpen, setCompletionModalOpen] = useState(false)
   const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null)
+
+  // 서버에서 정확한 KST 시간 조회
+  useEffect(() => {
+    const fetchServerTime = async () => {
+      try {
+        const response = await fetch('/api/time/now')
+        const result = await response.json()
+        if (result.success) {
+          setDate(result.today)
+        } else {
+          // 폴백: 클라이언트 KST 계산
+          setDate(getTodayKST())
+        }
+      } catch (error) {
+        console.error('서버 시간 조회 실패:', error)
+        // 폴백: 클라이언트 KST 계산
+        setDate(getTodayKST())
+      }
+    }
+    fetchServerTime()
+  }, [])
 
   const detectSchemaSupport = useCallback(async () => {
     const [{ error: scheduleAdminMemoError }, { error: washAdminNoteError }, { error: washCompletedByError }] = await Promise.all([
@@ -78,6 +101,12 @@ export default function StaffPage() {
   }, [supabase])
 
   const fetchTasks = useCallback(async () => {
+    // date가 설정되지 않았으면 대기
+    if (!date) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
 
     const support = schemaSupport ?? await detectSchemaSupport()
@@ -199,7 +228,7 @@ export default function StaffPage() {
       }
 
       const hasInterior = task.schedule.has_interior && task.interiorDone
-      const interiorPrice = hasInterior ? INTERIOR_PRICE : 0
+      const interiorPrice = hasInterior ? priceTable.interior : 0
 
       const payload: Record<string, unknown> = {
         vehicle_id: v.id,
@@ -352,7 +381,7 @@ export default function StaffPage() {
             <div className="text-right">
             <input
               type="date"
-              value={date}
+              value={date || ''}
               onChange={e => setDate(e.target.value)}
               className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700"
             />
@@ -392,8 +421,10 @@ export default function StaffPage() {
                 task={task}
                 isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
                 canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
-                onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
-                onToggleAdmin={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
+                onToggleWorker={() => { 
+                  setSelectedTaskIdx(idx)
+                  setCompletionModalOpen(true) 
+                }}
                 onCancel={() => toggleDone(idx)}
                 onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
                 onMemoChange={v => updateTask(idx, { memo: v })}
@@ -437,7 +468,7 @@ export default function StaffPage() {
 
 /* ─── 작업 카드 ─── */
 function TaskCard({
-  task, onToggleWorker, onToggleAdmin, onCancel,
+  task, onToggleWorker, onCancel,
   onInteriorToggle,
   onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
@@ -445,7 +476,6 @@ function TaskCard({
 }: {
   task: TaskItem
   onToggleWorker: () => void
-  onToggleAdmin: () => void
   onCancel: () => void
   onInteriorToggle: () => void
   onMemoChange: (v: string) => void
@@ -460,6 +490,7 @@ function TaskCard({
   canPersistAdminNote: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const { priceTable } = usePricing()
   const v = task.schedule.vehicle
   const customer = v.customer
 
@@ -547,7 +578,7 @@ function TaskCard({
               <Sofa size={16} />
               <div className="text-left">
                 <p className="text-sm font-semibold">실내 완료</p>
-                <p className="text-xs opacity-70">{task.interiorDone ? `+실내 ${INTERIOR_PRICE.toLocaleString()}원 추가됩니다` : '체크 시 실내 10,000원 추가'}</p>
+                <p className="text-xs opacity-70">{task.interiorDone ? `+실내 ${priceTable.interior.toLocaleString()}원 추가됩니다` : `체크 시 실내 ${priceTable.interior.toLocaleString()}원 추가`}</p>
               </div>
             </button>
           )}
@@ -669,28 +700,19 @@ function TaskCard({
 
           {/* 완료 버튼 */}
           {!task.done && (
-            <div className="flex gap-2">
-              <button
-                onClick={onToggleWorker}
-                disabled={isSaving}
-                className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
-              >
-                  {isSaving ? '처리 중...' : '세차 완료 처리'}
-              </button>
-              <button
-                onClick={onToggleAdmin}
-                  disabled={isSaving}
-                className="flex-1 bg-gray-700 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-800 transition-colors"
-              >
-                  {isSaving ? '처리 중...' : '관리자 직접 완료'}
-              </button>
-            </div>
+            <button
+              onClick={onToggleWorker}
+              disabled={isSaving}
+              className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+            >
+              {isSaving ? '처리 중...' : '세차 완료 처리'}
+            </button>
           )}
 
           {task.done && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-green-600 font-medium">
-                  ✓ {task.completedBy === 'admin' ? '관리자 직접 완료' : '작업자 완료'}
+                ✓ 작업자 완료
               </span>
               <button
                 onClick={onCancel}

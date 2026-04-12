@@ -8,8 +8,9 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { db } from '@/lib/supabase/client'
 import {
-  CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS, MONTHLY_PRICE_TABLE, ONETIME_PRICE_TABLE,
+  CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS,
 } from '@/lib/constants/pricing'
+import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice } from '@/lib/utils'
 import { generateSchedules, parseLocalDate } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount } from '@/types'
@@ -40,14 +41,10 @@ const emptyVehicle = (): LegacyVehicleForm => ({
   interior_count: 0,
 })
 
-function getMonthlyPriceForGrade(grade: string, monthlyCount: string): number {
-  if (monthlyCount === 'onetime') return (ONETIME_PRICE_TABLE as Record<string, number>)[grade] ?? 0
-  return (MONTHLY_PRICE_TABLE[monthlyCount] as Record<string, number> | undefined)?.[grade] ?? 0
-}
-
 export default function LegacyCustomerPage() {
   const router   = useRouter()
   const supabase = db()
+  const { getMonthlyPrice } = usePricing()
 
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
@@ -65,8 +62,8 @@ export default function LegacyCustomerPage() {
   const monthlyPrice = useMemo(() => {
     const custom = parseInt(vehicle.custom_price.replace(/[^0-9]/g, ''), 10)
     if (!isNaN(custom) && custom > 0) return custom
-    return getMonthlyPriceForGrade(vehicle.car_grade, vehicle.monthly_count)
-  }, [vehicle.custom_price, vehicle.car_grade, vehicle.monthly_count])
+    return getMonthlyPrice(vehicle.car_grade, vehicle.monthly_count)
+  }, [vehicle.custom_price, vehicle.car_grade, vehicle.monthly_count, getMonthlyPrice])
 
   const unitPrice = useMemo(() => {
     const cnt = vehicle.monthly_count === 'monthly_1' ? 1
@@ -330,7 +327,7 @@ export default function LegacyCustomerPage() {
               <input
                 value={vehicle.custom_price}
                 onChange={e => updateVehicle('custom_price', e.target.value)}
-                placeholder={`가격표 기준: ${formatPrice(getMonthlyPriceForGrade(vehicle.car_grade, vehicle.monthly_count))}`}
+                placeholder={`가격표 기준: ${formatPrice(getMonthlyPrice(vehicle.car_grade, vehicle.monthly_count))}`}
                 type="text"
                 inputMode="numeric"
                 className={inputCls}

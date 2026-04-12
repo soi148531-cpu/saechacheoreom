@@ -8,8 +8,8 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import {
   CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS,
-  getMonthlyPrice,
 } from '@/lib/constants/pricing'
+import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice } from '@/lib/utils'
 import {
   generateSchedules, getDateLabel, getWeekdayLabel, parseLocalDate,
@@ -20,7 +20,6 @@ import type { CarGrade, MonthlyCount, Customer } from '@/types'
 interface VehicleForm {
   car_name:      string
   plate_number:  string
-  unit_number:   string
   car_grade:     CarGrade
   monthly_count: MonthlyCount
   repeat_mode:   RepeatMode
@@ -33,7 +32,6 @@ interface VehicleForm {
 const emptyVehicle = (): VehicleForm => ({
   car_name:      '',
   plate_number:  '',
-  unit_number:   '',
   car_grade:     'mid_suv',
   monthly_count: 'monthly_2',
   repeat_mode:   'date',
@@ -63,6 +61,7 @@ export default function AddVehiclePage() {
   const { id }   = useParams<{ id: string }>()
   const router   = useRouter()
   const supabase = createClient()
+  const { getMonthlyPrice } = usePricing()
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [vehicle,  setVehicle]  = useState<VehicleForm>(emptyVehicle())
@@ -119,7 +118,6 @@ export default function AddVehiclePage() {
           customer_id:   id,
           car_name:      vehicle.car_name.trim(),
           plate_number:  vehicle.plate_number.trim().replace(/\s/g, ''),
-          unit_number:   vehicle.unit_number.trim(),
           car_grade:     vehicle.car_grade,
           monthly_count: vehicle.monthly_count,
           repeat_mode:   vehicle.repeat_mode,
@@ -208,15 +206,6 @@ export default function AddVehiclePage() {
                 />
               </Field>
             </div>
-
-            <Field label="동호수">
-              <input
-                value={vehicle.unit_number}
-                onChange={e => updateVehicle('unit_number', e.target.value)}
-                placeholder="101동 1201호"
-                className={inputCls}
-              />
-            </Field>
 
             <Field label="차량등급">
               <select
