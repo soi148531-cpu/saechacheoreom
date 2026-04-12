@@ -7,8 +7,7 @@ import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
 import { MessageBadge } from '@/components/MessageBadge'
 import { MessageButton } from '@/components/MessageButton'
-import { updateMessageSentAt } from '@/lib/services/messageService'
-import { filterMessageStatus } from '@/lib/services/messageService'
+import { updateMessageSentAt, filterMessageStatus, buildDetailedBillingMessage } from '@/lib/services/messageService'
 import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, PaymentMethod, Customer, MessageFilter } from '@/types'
 
 interface VehicleBilling {
@@ -449,47 +448,27 @@ export default function BillingPage() {
     }), 1000)
   }
 
-  function buildKakaoMessage(cb: CustomerBilling): string {
-    const [, m] = yearMonth.split('-')
-    const lines: string[] = []
-    lines.push(`[새차처럼] ${parseInt(m)}월 세차 청구 안내`)
-    lines.push(''.repeat(20))
-    lines.push(`고객명: ${cb.customer.name} 님`)
-    if (cb.customer.phone) lines.push(`연락처: ${cb.customer.phone}`)
-    lines.push(''.repeat(20))
-    
-    cb.vehicles.forEach(vb => {
-      if (vb.records.length > 0) {
-        lines.push(`[${vb.vehicle.car_name}] ${vb.vehicle.plate_number}`)
-        vb.records.forEach(r => {
-          const d = new Date(r.wash_date)
-          const basePrice = vb.vehicle.unit_price ?? 0
-          const interiorAmt = r.price - basePrice
-          if (interiorAmt > 0) {
-            lines.push(`   ${parseInt(m)}/${d.getDate()} 세차: ${formatPrice(basePrice)} + 실내 ${formatPrice(interiorAmt)}`)
-          } else {
-            lines.push(`   ${parseInt(m)}/${d.getDate()} 세차: ${formatPrice(r.price)}`)
-          }
-        })
-        if (vb.extraItems.length > 0) {
-          vb.extraItems.forEach(item => {
-            lines.push(`   ${item.item_name}${item.quantity > 1 ? ` ${item.quantity}` : ''}: ${formatPrice(item.amount)}`)
-          })
-        }
-        lines.push(`  소계: ${formatPrice(vb.totalAmount)}`)
-        lines.push('')
-      }
-    })
-    
-    lines.push(''.repeat(20))
-    lines.push(`총 청구금액: ${formatPrice(cb.totalAmount)}`)
-    lines.push('입금계좌: (계좌 정보)')
-    lines.push(''.repeat(20))
-    return lines.join('\n')
-  }
-
   async function copyKakao(cb: CustomerBilling) {
-    const msg = buildKakaoMessage(cb)
+    const [, m] = yearMonth.split('-')
+    const monthNum = parseInt(m, 10)
+
+    const vehicleDetails = cb.vehicles.map(vb => ({
+      carName: vb.vehicle.car_name || '',
+      plateNumber: vb.vehicle.plate_number || '',
+      records: vb.records.map(r => ({
+        date: `${monthNum}/${new Date(r.wash_date).getDate()}`,
+        price: r.price
+      })),
+      subtotal: vb.totalAmount
+    }))
+
+    const msg = await buildDetailedBillingMessage(
+      cb.customer.name,
+      cb.customer.phone || null,
+      String(monthNum),
+      vehicleDetails,
+      cb.totalAmount
+    )
     await navigator.clipboard.writeText(msg)
     alert('클립보드에 복사되었습니다. 카카오톡에 붙여넣기 하세요.')
   }
