@@ -62,11 +62,21 @@ export function renderMessageTemplate(
  * @param yearMonth - 년월 (예: "2026-04")
  * @param records - 세차 기록
  */
-export async function buildBillingMessage(
+/**
+ * 청구 정보로 상세 메시지 생성 (실제 발송용)
+ * @param billing - 청구 데이터 (vehicle 포함)
+ * @param yearMonth - 년월 (예: "2026-04")
+ * @param records - 세차 기록
+ * @param customerName - 고객명
+ * @param phone - 연락처
+ */
+export function buildBillingMessage(
   billing: Billing,
   yearMonth: string,
-  records: WashRecord[] = []
-): Promise<string> {
+  records: WashRecord[] = [],
+  customerName?: string,
+  phone?: string
+): string {
   const [year, month] = yearMonth.split('-')
   const monthNum = parseInt(month, 10)
 
@@ -77,32 +87,33 @@ export async function buildBillingMessage(
   lines.push('')
 
   // 고객 정보
-  const customerName = billing.vehicle?.customer?.name || '고객'
-  lines.push(`고객명: ${customerName} 님`)
+  const name = customerName || billing.vehicle?.customer?.name || '고객'
+  lines.push(`고객명: ${name} 님`)
 
-  const phone = billing.vehicle?.customer?.phone
-  if (phone) {
-    lines.push(`연락처: ${phone}`)
+  const phoneNum = phone || billing.vehicle?.customer?.phone
+  if (phoneNum) {
+    lines.push(`연락처: ${phoneNum}`)
   }
   lines.push('')
 
-  // 차량 정보
+  // 차량별 세차 내역
   const carName = billing.vehicle?.car_name || ''
   const plateNumber = billing.vehicle?.plate_number || ''
   lines.push(`[${carName}] ${plateNumber}`)
 
-  // 세차 내역
+  // 세차 기록
+  let recordTotal = 0
   if (records.length > 0) {
     records.forEach(r => {
       const d = new Date(r.wash_date)
       const day = d.getDate()
-      lines.push(`   ${monthNum}/${day} 세차: ${formatPrice(r.price)}`)
+      const price = r.price
+      lines.push(`${monthNum}/${day} 세차: ${formatPrice(price)}`)
+      recordTotal += price
     })
   }
 
-  // 소계
-  const washTotal = records.reduce((sum, r) => sum + r.price, 0)
-  lines.push(`  소계: ${formatPrice(washTotal)}`)
+  lines.push(`소계: ${formatPrice(recordTotal)}`)
   lines.push('')
 
   // 총액

@@ -29,8 +29,8 @@ INSERT INTO message_templates (template_key, message_body)
 연락처: {phone}
 
 [{car_name}] {plate_number}
-   세차 내역은 앱에서 확인해주세요.
-   총액: {amount}원
+{wash_details}
+소계: {wash_total}
 
 총 청구금액: {amount}원
 입금계좌: (계좌정보)')
