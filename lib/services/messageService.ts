@@ -70,7 +70,7 @@ export async function buildBillingMessage(
   const [year, month] = yearMonth.split('-')
   const monthNum = parseInt(month, 10)
 
-  let lines: string[] = []
+  const lines: string[] = []
 
   // 헤더
   lines.push(`[새차처럼] ${monthNum}월 세차 청구 안내`)
