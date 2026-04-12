@@ -7,7 +7,7 @@ import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice, formatYearMonth, getCurrentYearMonth } from '@/lib/utils'
 import { MessageBadge } from '@/components/MessageBadge'
 import { MessageButton } from '@/components/MessageButton'
-import { updateMessageSentAt, filterMessageStatus, buildDetailedBillingMessage } from '@/lib/services/messageService'
+import { buildDetailedBillingMessage } from '@/lib/services/messageService'
 import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, PaymentMethod, Customer, MessageFilter } from '@/types'
 
 interface VehicleBilling {
@@ -509,7 +509,7 @@ export default function BillingPage() {
         const date = vb.paidAt ? new Date(vb.paidAt) : null
         const dateStr = date ? `${date.getMonth() + 1}/${date.getDate()}` : '-'
         const methodStr = vb.paymentMethod ? (PAYMENT_METHOD_LABELS[vb.paymentMethod] ?? vb.paymentMethod) : '-'
-        const sentStr = vb.sentAt ? (() => { const d = new Date(vb.sentAt!); return `${d.getMonth()+1}/${d.getDate()}` })() : '-'
+        const sentStr = vb.messageSentAt ? (() => { const d = new Date(vb.messageSentAt!); return `${d.getMonth()+1}/${d.getDate()}` })() : '-'
         rows.push(`${dateStr}\t${cb.customer.name}\t${vb.paidAmount}\t${methodStr}\t${sentStr}`)
       })
     })

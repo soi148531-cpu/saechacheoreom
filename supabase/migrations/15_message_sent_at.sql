@@ -19,19 +19,17 @@ CREATE TABLE IF NOT EXISTS message_templates (
 
 COMMENT ON TABLE message_templates IS '카톡 메시지 템플릿 (배포 없이 수정 가능)';
 COMMENT ON COLUMN message_templates.template_key IS '템플릿 키 (billing_notification)';
-COMMENT ON COLUMN message_templates.message_body IS '메시지 본문 (변수: {customer_name}, {amount}, {car_name}, {unit_number}, {month})';
+COMMENT ON COLUMN message_templates.message_body IS '메시지 본문 (변수: {customer_name}, {phone}, {month}, {vehicle_details}, {total_amount})';
 
 -- 초기 템플릿 데이터
 INSERT INTO message_templates (template_key, message_body)
-  VALUES ('billing_notification', '[새차처럼] {month} 세차 청구 안내
+  VALUES ('billing_notification', '[새차처럼] {month}월 세차 청구 안내
 
 고객명: {customer_name} 님
 연락처: {phone}
 
-[{car_name}] {plate_number}
-{wash_details}
-소계: {wash_total}
+{vehicle_details}
 
-총 청구금액: {amount}원
-입금계좌: (계좌정보)')
+총 청구금액: {total_amount}원
+입금계좌: (토스뱅크 1000-1996-3848) 박현제')
   ON CONFLICT (template_key) DO NOTHING;
