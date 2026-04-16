@@ -616,8 +616,9 @@ function ScheduleRow({
   async function saveRepeatReset() {
     const v = schedule.vehicle
     if (!v || !repeatBase) return
-    const mc = v.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4'
+    const mc = v.monthly_count
     if (mc === 'onetime') return
+    const mcTyped = mc as 'monthly_1' | 'monthly_2' | 'monthly_4'
     setRepeatSaving(true)
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -628,7 +629,7 @@ function ScheduleRow({
         .gte('scheduled_date', today)
       // 새 기준일로 24개월치 재생성
       const base = parseLocalDate(repeatBase)
-      const items = generateSchedules(v.id, base, mc, repeatMode, 24)
+      const items = generateSchedules(v.id, base, mcTyped, repeatMode, 24)
       // 오늘 이후 것만 insert
       const future = items.filter(s => s.scheduled_date >= today)
       if (future.length > 0) {
