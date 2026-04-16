@@ -763,8 +763,22 @@ export default function BillingPage() {
                                   <span className="font-semibold text-gray-900">{v.car_name}</span>
                                   <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{v.plate_number}</span>
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  {CAR_GRADE_LABELS[v.car_grade]}  {MONTHLY_COUNT_LABELS[v.monthly_count]}  {vb.records.length}회 세차
+                                <div className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
+                                  <span>{CAR_GRADE_LABELS[v.car_grade]}</span>
+                                  <span>{MONTHLY_COUNT_LABELS[v.monthly_count]}</span>
+                                  {(() => {
+                                    const target = ({ monthly_1: 1, monthly_2: 2, monthly_4: 4, onetime: 1 } as Record<string, number>)[v.monthly_count] ?? 1
+                                    const actual = vb.records.length
+                                    const done = actual >= target
+                                    return (
+                                      <span className={`flex items-center gap-0.5 font-medium ${done ? 'text-green-600' : 'text-gray-400'}`}>
+                                        {Array.from({ length: target }, (_, i) => (
+                                          <span key={i} className={i < actual ? (done ? 'text-green-500' : 'text-blue-400') : 'text-gray-300'}>●</span>
+                                        ))}
+                                        <span className="ml-0.5">{actual}/{target}{done ? ' ✓' : ''}</span>
+                                      </span>
+                                    )
+                                  })()}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
@@ -775,26 +789,22 @@ export default function BillingPage() {
                                 </div>
                               </div>
                             </button>
-                            {/* 입금 요약 정보 — 항상 표시 */}
-                            <div className="px-3 pb-2 flex gap-3 text-xs text-gray-500 flex-wrap">
-                              {vb.paidAt ? (
-                                <span className="text-green-700 font-medium">
-                                  입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">입금일 미기록</span>
-                              )}
-                              {vb.paymentMethod ? (
-                                <span className="font-medium text-gray-700">{PAYMENT_METHOD_LABELS[vb.paymentMethod] ?? vb.paymentMethod}</span>
-                              ) : (
-                                <span className="text-gray-400">증빙 미선택</span>
-                              )}
-                              {vb.messageSentAt ? (
-                                <span className="text-blue-600">카톡 {(() => { const d = new Date(vb.messageSentAt!); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })()}</span>
-                              ) : (
-                                <span className="text-gray-400">카톡 미발송</span>
-                              )}
-                            </div>
+                            {/* 입금 요약 정보 — 데이터 있을 때만 표시 */}
+                            {(vb.paidAt || vb.paymentMethod || vb.messageSentAt) && (
+                              <div className="px-3 pb-2 flex gap-3 text-xs text-gray-500 flex-wrap">
+                                {vb.paidAt && (
+                                  <span className="text-green-700 font-medium">
+                                    입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}
+                                  </span>
+                                )}
+                                {vb.paymentMethod && (
+                                  <span className="font-medium text-gray-700">{PAYMENT_METHOD_LABELS[vb.paymentMethod] ?? vb.paymentMethod}</span>
+                                )}
+                                {vb.messageSentAt && (
+                                  <span className="text-blue-600">카톡 {(() => { const d = new Date(vb.messageSentAt!); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })()}</span>
+                                )}
+                              </div>
+                            )}
 
                             {/* 차량 상세 */}
                             {isVehicleSelected && (
