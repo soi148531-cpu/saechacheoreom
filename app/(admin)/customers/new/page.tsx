@@ -117,9 +117,9 @@ export default function NewCustomerPage() {
           : getMonthlyPrice(v.car_grade, v.monthly_count) / (v.monthly_count === 'monthly_1' ? 1 : v.monthly_count === 'monthly_2' ? 2 : 4)
         const status     = v.monthly_count === 'onetime' ? 'irregular' : 'active'
 
-        const { data: vehicle, error: vErr } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: vehicle, error: vErr } = await (supabase as any)
           .from('vehicles')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .insert({
             customer_id:   customer.id,
             car_name:      v.car_name.trim(),
@@ -134,7 +134,7 @@ export default function NewCustomerPage() {
             interior_count:  v.interior_count,
             is_new_customer: v.is_new_customer,
             status,
-          } as any)
+          })
           .select()
           .single()
 

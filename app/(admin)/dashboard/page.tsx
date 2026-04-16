@@ -655,10 +655,9 @@ function ScheduleRow({
     if (!schedule.vehicle) return
     const next = !isNew
     setIsNew(next)
-    await supabaseClient
-      .from('vehicles')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .update({ is_new_customer: next } as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabaseClient as any).from('vehicles')
+      .update({ is_new_customer: next })
       .eq('id', schedule.vehicle_id)
   }
 
