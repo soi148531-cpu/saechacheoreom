@@ -367,18 +367,22 @@ function VehicleCard({
           </Field>
         </div>
 
-        {/* 신규 기준일 — 반복 일정 생성 기준 */}
-        <Field label="신규 기준일 ✱" required>
-          <input
-            type="date"
-            value={v.base_date}
-            onChange={e => onUpdate(idx, 'base_date', e.target.value)}
-            className={inputCls}
-          />
-        </Field>
-        <p className="text-xs text-gray-400 -mt-2">
-          이 날짜를 기준으로 반복 일정이 1년치 자동 생성됩니다
-        </p>
+        {/* 신규 기준일 — 반복 일정 생성 기준 (비정기 제외) */}
+        {v.monthly_count !== 'onetime' && (
+          <>
+            <Field label="신규 기준일">
+              <input
+                type="date"
+                value={v.base_date}
+                onChange={e => onUpdate(idx, 'base_date', e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <p className="text-xs text-gray-400 -mt-2">
+              이 날짜를 기준으로 반복 일정이 1년치 자동 생성됩니다
+            </p>
+          </>
+        )}
 
         {/* 월1회: 반복 방식 선택 (네이버 캘린더 방식) */}
         {v.monthly_count === 'monthly_1' && (
