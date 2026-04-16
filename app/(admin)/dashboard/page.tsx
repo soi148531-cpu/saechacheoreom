@@ -657,7 +657,8 @@ function ScheduleRow({
     setIsNew(next)
     await supabaseClient
       .from('vehicles')
-      .update({ is_new_customer: next })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update({ is_new_customer: next } as any)
       .eq('id', schedule.vehicle_id)
   }
 

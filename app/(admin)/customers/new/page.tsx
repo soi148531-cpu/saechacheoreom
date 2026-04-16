@@ -119,6 +119,7 @@ export default function NewCustomerPage() {
 
         const { data: vehicle, error: vErr } = await supabase
           .from('vehicles')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .insert({
             customer_id:   customer.id,
             car_name:      v.car_name.trim(),
@@ -133,7 +134,7 @@ export default function NewCustomerPage() {
             interior_count:  v.interior_count,
             is_new_customer: v.is_new_customer,
             status,
-          })
+          } as any)
           .select()
           .single()
 
