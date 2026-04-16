@@ -660,326 +660,211 @@ export default function BillingPage() {
           ) : searchQuery ? '검색 결과가 없습니다' : '이번 달 세차 실적이 없습니다'}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {displayedCustomers.map(cb => {
-            const isExpanded = selectedCustomerId === cb.customerId
+            const isMemoOpen = selectedCustomerId === cb.customerId
             const unPaidVehicles = cb.vehicles.filter(v => v.paymentStatus !== 'paid').length
             return (
               <div key={cb.customerId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {/* 고객 헤더 */}
-                <button
-                  onClick={() => setSelectedCustomerId(isExpanded ? null : cb.customerId)}
-                  className="w-full flex items-start justify-between p-4 text-left hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-lg font-bold text-gray-900">{cb.customer.name}</span>
-                      {cb.customer.phone && (
-                        <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                          {cb.customer.phone}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {cb.vehicles.length}개 차량  {cb.totalRecords}회 세차
-                      {unPaidVehicles > 0 && <span className="ml-1 text-red-500 font-medium">미입금 {unPaidVehicles}개</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-                    <div className="text-right">
-                      <div className="font-bold text-gray-900">{formatPrice(cb.totalAmount)}</div>
-                    </div>
+                {/* 고객 헤더 — 클릭 시 메모만 토글 */}
+                <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                  <button
+                    onClick={() => setSelectedCustomerId(isMemoOpen ? null : cb.customerId)}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                  >
+                    <span className="text-base font-bold text-gray-900">{cb.customer.name}</span>
+                    {cb.customer.phone && (
+                      <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded shrink-0">
+                        {cb.customer.phone}
+                      </span>
+                    )}
+                    {cb.memo && <span className="text-blue-400 text-xs shrink-0">📝</span>}
+                  </button>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <span className="font-bold text-gray-900">{formatPrice(cb.totalAmount)}</span>
                     <button
-                      onClick={e => {
-                        e.stopPropagation()
-                        copyKakao(cb)
-                      }}
+                      onClick={() => copyKakao(cb)}
                       className="text-yellow-600 hover:text-yellow-700 p-1 rounded hover:bg-yellow-50"
-                      title="카톡 전송"
+                      title="카톡 복사"
                     >
-                      <Copy size={18} />
+                      <Copy size={16} />
                     </button>
                   </div>
-                </button>
+                </div>
 
-                {/* 고객 상세 - 펼침 */}
-                {isExpanded && (
-                  <div className="border-t border-gray-100 p-4 space-y-4">
-                    {/* 메모 섹션 */}
-                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                      <div className="flex items-start justify-between mb-2">
-                        <label className="text-xs font-semibold text-blue-700">고객 메모 (요청사항)</label>
-                        {editingMemo[cb.customerId] !== undefined ? (
-                          <button
-                            onClick={() => saveMemo(cb.customerId)}
-                            disabled={savingMemo[cb.customerId]}
-                            className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-700 disabled:text-gray-400"
-                          >
-                            <Save size={12} />
-                            {savingMemo[cb.customerId] ? '저장 중...' : '저장'}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setEditingMemo(prev => ({ ...prev, [cb.customerId]: cb.memo || '' }))}
-                            className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                          >
-                            <Edit2 size={12} />
-                            수정
-                          </button>
-                        )}
-                      </div>
+                {/* 메모 — 클릭 시만 표시 */}
+                {isMemoOpen && (
+                  <div className="mx-3 mb-2 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                    <div className="flex items-start justify-between mb-1">
+                      <label className="text-xs font-semibold text-blue-700">고객 메모 (요청사항)</label>
                       {editingMemo[cb.customerId] !== undefined ? (
-                        <textarea
-                          value={editingMemo[cb.customerId]}
-                          onChange={e => setEditingMemo(prev => ({ ...prev, [cb.customerId]: e.target.value }))}
-                          className="w-full border border-blue-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                          rows={2}
-                          placeholder="고객 요청사항을 입력하세요"
-                        />
+                        <button
+                          onClick={() => saveMemo(cb.customerId)}
+                          disabled={savingMemo[cb.customerId]}
+                          className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+                        >
+                          <Save size={12} />
+                          {savingMemo[cb.customerId] ? '저장 중...' : '저장'}
+                        </button>
                       ) : (
-                        <p className="text-sm text-blue-900 min-h-8">
-                          {cb.memo || <span className="text-blue-400">메모가 없습니다</span>}
-                        </p>
+                        <button
+                          onClick={() => setEditingMemo(prev => ({ ...prev, [cb.customerId]: cb.memo || '' }))}
+                          className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit2 size={12} />
+                          수정
+                        </button>
                       )}
                     </div>
-
-                    {/* 등록 차량 목록 */}
-                    <div className="space-y-3">
-                      {cb.vehicles.map(vb => {
-                        const v = vb.vehicle
-                        const isVehicleSelected = selectedVehicleId === v.id
-                        const isAdding = showAddForm === v.id
-                        const newItem = addingItem[v.id] ?? { name: '', price: '', qty: '1' }
-
-                        return (
-                          <div key={v.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                            {/* 차량 요약 */}
-                            <button
-                              onClick={() => setSelectedVehicleId(isVehicleSelected ? null : v.id)}
-                              className="w-full flex items-start justify-between p-3 text-left hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                                  <span className="font-semibold text-gray-900">{v.car_name}</span>
-                                  <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{v.plate_number}</span>
-                                </div>
-                                <div className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
-                                  <span>{CAR_GRADE_LABELS[v.car_grade]}</span>
-                                  <span>{MONTHLY_COUNT_LABELS[v.monthly_count]}</span>
-                                  {(() => {
-                                    const target = ({ monthly_1: 1, monthly_2: 2, monthly_4: 4, onetime: 1 } as Record<string, number>)[v.monthly_count] ?? 1
-                                    const actual = vb.records.length
-                                    const done = actual >= target
-                                    return (
-                                      <span className={`flex items-center gap-0.5 font-medium ${done ? 'text-green-600' : 'text-gray-400'}`}>
-                                        {Array.from({ length: target }, (_, i) => (
-                                          <span key={i} className={i < actual ? (done ? 'text-green-500' : 'text-blue-400') : 'text-gray-300'}>●</span>
-                                        ))}
-                                        <span className="ml-0.5">{actual}/{target}{done ? ' ✓' : ''}</span>
-                                      </span>
-                                    )
-                                  })()}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                                <span className="font-semibold text-gray-900 text-sm">{formatPrice(vb.totalAmount)}</span>
-                                <div className="flex items-center gap-1">
-                                  <StatusBadge vb={vb} />
-                                  <MessageBadge messageSentAt={vb.messageSentAt} />
-                                </div>
-                              </div>
-                            </button>
-                            {/* 입금 요약 정보 — 데이터 있을 때만 표시 */}
-                            {(vb.paidAt || vb.paymentMethod || vb.messageSentAt) && (
-                              <div className="px-3 pb-2 flex gap-3 text-xs text-gray-500 flex-wrap">
-                                {vb.paidAt && (
-                                  <span className="text-green-700 font-medium">
-                                    입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}
-                                  </span>
-                                )}
-                                {vb.paymentMethod && (
-                                  <span className="font-medium text-gray-700">{PAYMENT_METHOD_LABELS[vb.paymentMethod] ?? vb.paymentMethod}</span>
-                                )}
-                                {vb.messageSentAt && (
-                                  <span className="text-blue-600">카톡 {(() => { const d = new Date(vb.messageSentAt!); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })()}</span>
-                                )}
-                              </div>
-                            )}
-
-                            {/* 차량 상세 */}
-                            {isVehicleSelected && (
-                              <div className="border-t border-gray-100 p-3 bg-gray-50 space-y-3">
-                                {/* 세차 실적 */}
-                                <div>
-                                  <p className="text-xs font-semibold text-gray-600 mb-2">세차 실적</p>
-                                  <div className="space-y-1">
-                                    {vb.records.map(r => {
-                                      const d = new Date(r.wash_date)
-                                      return (
-                                        <div key={r.id} className="flex justify-between text-sm bg-white rounded px-2 py-1">
-                                          <span className="text-gray-600 flex items-center gap-1">
-                                            {d.getMonth() + 1}/{d.getDate()}
-                                            {r.service_type === 'interior_only' && (
-                                              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">실내전용</span>
-                                            )}
-                                            {r.service_type === 'interior' && (
-                                              <span className="text-xs text-purple-600">(+실내)</span>
-                                            )}
-                                          </span>
-                                          <span className="font-medium text-gray-900">{formatPrice(r.price)}</span>
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                  <div className="flex justify-between mt-1.5 text-xs font-semibold bg-white rounded px-2 py-1">
-                                    <span>세차 소계</span>
-                                    <span className="text-blue-600">{formatPrice(vb.washTotal)}</span>
-                                  </div>
-                                </div>
-
-                                {/* 추가 항목 */}
-                                {vb.extraItems.length > 0 && (
-                                  <div>
-                                    <p className="text-xs font-semibold text-gray-600 mb-1.5">추가 서비스</p>
-                                    <div className="space-y-1">
-                                      {vb.extraItems.map(item => (
-                                        <div key={item.id} className="flex items-center justify-between text-sm bg-white rounded px-2 py-1">
-                                          <span className="text-gray-700">
-                                            {item.item_name}{item.quantity > 1 && ` ${item.quantity}`}
-                                          </span>
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-medium text-gray-900">{formatPrice(item.amount)}</span>
-                                            <button
-                                              onClick={() => deleteItem(vb, item.id, item.amount)}
-                                              className="text-red-500 hover:text-red-700 p-0.5"
-                                            >
-                                              <Trash2 size={12} />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* 추가 항목 폼 */}
-                                {isAdding ? (
-                                  <div className="bg-white rounded-lg p-2 space-y-2 border border-blue-200">
-                                    <div className="grid grid-cols-3 gap-1.5">
-                                      <input
-                                        type="text"
-                                        placeholder="항목명"
-                                        value={newItem.name}
-                                        onChange={e => setAddingItem(p => ({ ...p, [v.id]: { ...newItem, name: e.target.value } }))}
-                                        className="border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                      />
-                                      <input
-                                        type="number"
-                                        placeholder="가격"
-                                        value={newItem.price}
-                                        onChange={e => setAddingItem(p => ({ ...p, [v.id]: { ...newItem, price: e.target.value } }))}
-                                        className="border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                      />
-                                      <input
-                                        type="number"
-                                        placeholder="수량"
-                                        value={newItem.qty}
-                                        onChange={e => setAddingItem(p => ({ ...p, [v.id]: { ...newItem, qty: e.target.value } }))}
-                                        className="border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                      />
-                                    </div>
-                                    <div className="flex gap-1">
-                                      <button
-                                        onClick={() => addItem(vb, newItem.name, Number(newItem.price), Number(newItem.qty))}
-                                        disabled={!newItem.name || !newItem.price}
-                                        className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-300"
-                                      >
-                                        추가
-                                      </button>
-                                      <button
-                                        onClick={() => setShowAddForm(null)}
-                                        className="flex-1 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
-                                      >
-                                        취소
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : partialInput[v.id] !== undefined ? (
-                                  // 부분납 금액 입력 패널
-                                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
-                                    <p className="text-xs font-semibold text-yellow-800">부분납 금액 입력</p>
-                                    <div className="flex items-center gap-2">
-                                      <div className="relative flex-1">
-                                        <input
-                                          type="number"
-                                          placeholder="입금받은 금액"
-                                          value={partialInput[v.id]}
-                                          onChange={e => setPartialInput(prev => ({ ...prev, [v.id]: e.target.value }))}
-                                          onKeyDown={e => { if (e.key === 'Enter') confirmPartial(vb) }}
-                                          className="w-full border border-yellow-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                                          autoFocus
-                                        />
-                                        <span className="absolute right-2 top-1.5 text-xs text-gray-400">원</span>
-                                      </div>
-                                      <button
-                                        onClick={() => confirmPartial(vb)}
-                                        disabled={!partialInput[v.id]}
-                                        className="bg-yellow-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-yellow-600 disabled:opacity-40"
-                                      >
-                                        확인
-                                      </button>
-                                      <button
-                                        onClick={() => setPartialInput(prev => { const n = { ...prev }; delete n[v.id]; return n })}
-                                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5"
-                                      >
-                                        취소
-                                      </button>
-                                    </div>
-                                    <p className="text-xs text-yellow-700">전체 청구: {formatPrice(vb.totalAmount)}</p>
-                                  </div>
-                                ) : (
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => setShowAddForm(v.id)}
-                                      className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-blue-600 border border-blue-300 rounded py-1 hover:bg-blue-50"
-                                    >
-                                      <Plus size={14} />
-                                      항목 추가
-                                    </button>
-                                    <MessageButton
-                                      billingId={vb.billingId}
-                                      messageSentAt={vb.messageSentAt}
-                                      onEnsureBilling={() => ensureBilling(vb)}
-                                      onUpdate={handleMessageUpdate}
-                                    />
-                                    <button
-                                      onClick={() => openPaymentModal(vb)}
-                                      className="text-xs px-2 py-1 rounded font-medium border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
-                                    >
-                                      입금완료
-                                    </button>
-                                    <button
-                                      onClick={() => setPartialInput(prev => ({ ...prev, [v.id]: String(vb.paidAmount || '') }))}
-                                      className="text-xs px-2 py-1 rounded font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors"
-                                    >
-                                      부분납
-                                    </button>
-                                    <button
-                                      onClick={() => updatePaymentStatus(vb, 'unpaid')}
-                                      className="text-xs px-2 py-1 rounded font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-                                    >
-                                      {vb.paymentStatus === 'paid' ? '입금취소' : '미입금'}
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
+                    {editingMemo[cb.customerId] !== undefined ? (
+                      <textarea
+                        value={editingMemo[cb.customerId]}
+                        onChange={e => setEditingMemo(prev => ({ ...prev, [cb.customerId]: e.target.value }))}
+                        className="w-full border border-blue-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        rows={2}
+                        placeholder="고객 요청사항을 입력하세요"
+                      />
+                    ) : (
+                      <p className="text-sm text-blue-900">
+                        {cb.memo || <span className="text-blue-400">메모가 없습니다</span>}
+                      </p>
+                    )}
                   </div>
                 )}
+
+                {/* 차량 목록 — 항상 표시 */}
+                <div className="divide-y divide-gray-100 border-t border-gray-100">
+                  {cb.vehicles.map(vb => {
+                    const v = vb.vehicle
+                    const isVehicleSelected = selectedVehicleId === v.id
+                    const isAdding = showAddForm === v.id
+                    const newItem = addingItem[v.id] ?? { name: '', price: '', qty: '1' }
+                    const target = ({ monthly_1: 1, monthly_2: 2, monthly_4: 4, onetime: 1 } as Record<string, number>)[v.monthly_count] ?? 1
+                    const actual = vb.records.length
+                    const done = actual >= target
+
+                    return (
+                      <div key={v.id} className="px-3 py-2.5">
+                        {/* 차량 정보 행 */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-gray-900 text-sm">{v.car_name}</span>
+                              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{v.plate_number}</span>
+                              <span className={`flex items-center gap-0.5 text-xs font-medium ${done ? 'text-green-600' : 'text-blue-500'}`}>
+                                {Array.from({ length: target }, (_, i) => (
+                                  <span key={i} className={i < actual ? (done ? 'text-green-500' : 'text-blue-400') : 'text-gray-300'}>●</span>
+                                ))}
+                                <span className="ml-0.5">{actual}/{target}{done ? ' ✓' : ''}</span>
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
+                              {vb.paidAt && <span className="ml-1.5 text-green-700 font-medium">입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}</span>}
+                              {vb.paymentMethod && <span className="ml-1 text-gray-600">{PAYMENT_METHOD_LABELS[vb.paymentMethod]}</span>}
+                              {vb.messageSentAt && <span className="ml-1 text-blue-500">카톡✓</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className="font-semibold text-gray-900 text-sm">{formatPrice(vb.totalAmount)}</span>
+                            <StatusBadge vb={vb} />
+                          </div>
+                        </div>
+
+                        {/* 액션 버튼 — 항상 표시 */}
+                        {partialInput[v.id] !== undefined ? (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 space-y-2">
+                            <p className="text-xs font-semibold text-yellow-800">부분납 금액 입력 (전체: {formatPrice(vb.totalAmount)})</p>
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <input
+                                  type="number"
+                                  placeholder="입금받은 금액"
+                                  value={partialInput[v.id]}
+                                  onChange={e => setPartialInput(prev => ({ ...prev, [v.id]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === 'Enter') confirmPartial(vb) }}
+                                  className="w-full border border-yellow-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                                  autoFocus
+                                />
+                                <span className="absolute right-2 top-1.5 text-xs text-gray-400">원</span>
+                              </div>
+                              <button onClick={() => confirmPartial(vb)} disabled={!partialInput[v.id]} className="bg-yellow-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-yellow-600 disabled:opacity-40">확인</button>
+                              <button onClick={() => setPartialInput(prev => { const n = { ...prev }; delete n[v.id]; return n })} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5">취소</button>
+                            </div>
+                          </div>
+                        ) : isAdding ? (
+                          <div className="bg-white rounded-lg p-2 space-y-2 border border-blue-200">
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <input type="text" placeholder="항목명" value={newItem.name} onChange={e => setAddingItem(p => ({ ...p, [v.id]: { ...newItem, name: e.target.value } }))} className="border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              <input type="number" placeholder="가격" value={newItem.price} onChange={e => setAddingItem(p => ({ ...p, [v.id]: { ...newItem, price: e.target.value } }))} className="border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              <input type="number" placeholder="수량" value={newItem.qty} onChange={e => setAddingItem(p => ({ ...p, [v.id]: { ...newItem, qty: e.target.value } }))} className="border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div className="flex gap-1">
+                              <button onClick={() => addItem(vb, newItem.name, Number(newItem.price), Number(newItem.qty))} disabled={!newItem.name || !newItem.price} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-300">추가</button>
+                              <button onClick={() => setShowAddForm(null)} className="flex-1 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50">취소</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1 flex-wrap">
+                            <button onClick={() => setShowAddForm(v.id)} className="flex items-center gap-0.5 text-xs px-2 py-1 rounded font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
+                              <Plus size={12} />항목
+                            </button>
+                            <MessageButton
+                              billingId={vb.billingId}
+                              messageSentAt={vb.messageSentAt}
+                              onEnsureBilling={() => ensureBilling(vb)}
+                              onUpdate={handleMessageUpdate}
+                            />
+                            <button onClick={() => openPaymentModal(vb)} className="text-xs px-2 py-1 rounded font-medium border border-green-300 text-green-700 hover:bg-green-50">완납</button>
+                            <button onClick={() => setPartialInput(prev => ({ ...prev, [v.id]: String(vb.paidAmount || '') }))} className="text-xs px-2 py-1 rounded font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50">부분납</button>
+                            <button onClick={() => updatePaymentStatus(vb, 'unpaid')} className="text-xs px-2 py-1 rounded font-medium border border-red-300 text-red-600 hover:bg-red-50">
+                              {vb.paymentStatus === 'paid' ? '입금취소' : '미입금'}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* 세차 실적 상세 — 차량 클릭 시 토글 */}
+                        <button
+                          onClick={() => setSelectedVehicleId(isVehicleSelected ? null : v.id)}
+                          className="mt-1.5 text-xs text-gray-400 hover:text-gray-600"
+                        >
+                          {isVehicleSelected ? '▲ 세차 실적 닫기' : `▼ 세차 실적 보기 (${actual}건)`}
+                        </button>
+
+                        {isVehicleSelected && (
+                          <div className="mt-2 bg-gray-50 rounded-lg p-2 space-y-1">
+                            {vb.records.map(r => {
+                              const d = new Date(r.wash_date)
+                              return (
+                                <div key={r.id} className="flex justify-between text-sm bg-white rounded px-2 py-1">
+                                  <span className="text-gray-600 flex items-center gap-1">
+                                    {d.getMonth() + 1}/{d.getDate()}
+                                    {r.service_type === 'interior_only' && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">실내전용</span>}
+                                    {r.service_type === 'interior' && <span className="text-xs text-purple-600">(+실내)</span>}
+                                  </span>
+                                  <span className="font-medium text-gray-900">{formatPrice(r.price)}</span>
+                                </div>
+                              )
+                            })}
+                            {vb.extraItems.length > 0 && vb.extraItems.map(item => (
+                              <div key={item.id} className="flex items-center justify-between text-sm bg-white rounded px-2 py-1">
+                                <span className="text-gray-700">{item.item_name}{item.quantity > 1 && ` ×${item.quantity}`}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-gray-900">{formatPrice(item.amount)}</span>
+                                  <button onClick={() => deleteItem(vb, item.id, item.amount)} className="text-red-500 hover:text-red-700 p-0.5"><Trash2 size={12} /></button>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="flex justify-between text-xs font-semibold bg-white rounded px-2 py-1">
+                              <span>합계</span>
+                              <span className="text-blue-600">{formatPrice(vb.totalAmount)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )
           })}
