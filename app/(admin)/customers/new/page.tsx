@@ -63,11 +63,11 @@ export default function NewCustomerPage() {
   // 차량 목록
   const [vehicles, setVehicles] = useState<VehicleForm[]>([emptyVehicle()])
 
-  function updateVehicle(idx: number, field: keyof VehicleForm, value: string) {
+  function updateVehicle(idx: number, field: keyof VehicleForm, value: string | boolean) {
     setVehicles(prev =>
       prev.map((v, i) => i === idx ? {
         ...v,
-        [field]: field === 'interior_count' ? Number(value) : value
+        [field]: typeof value === 'boolean' ? value : field === 'interior_count' ? Number(value) : value
       } : v)
     )
   }
@@ -274,7 +274,7 @@ function VehicleCard({
 }: {
   v: VehicleForm
   idx: number
-  onUpdate: (i: number, f: keyof VehicleForm, val: string) => void
+  onUpdate: (i: number, f: keyof VehicleForm, val: string | boolean) => void
   onRemove: (i: number) => void
   showRemove: boolean
 }) {
