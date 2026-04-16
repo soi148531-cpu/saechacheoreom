@@ -858,7 +858,7 @@ export default function BillingPage() {
                           onClick={() => setSelectedVehicleId(isVehicleSelected ? null : v.id)}
                           className="mt-1.5 text-xs text-gray-400 hover:text-gray-600"
                         >
-                          {isVehicleSelected ? '▲ 세차 실적 닫기' : `▼ 세차 실적 보기 (${actual}건)`}
+                          {isVehicleSelected ? '▲ 세차 실적 닫기' : `▼ 세차 실적 보기 (${vb.records.length}건)`}
                         </button>
 
                         {isVehicleSelected && (
