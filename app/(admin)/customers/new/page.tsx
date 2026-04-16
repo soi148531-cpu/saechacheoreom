@@ -20,27 +20,29 @@ import {
 import type { CarGrade, MonthlyCount } from '@/types'
 
 interface VehicleForm {
-  car_name:      string
-  plate_number:  string
-  car_grade:     CarGrade
-  monthly_count: MonthlyCount
-  repeat_mode:   RepeatMode   // 월1회 전용
-  start_date:    string
-  end_date:      string
-  base_date:     string
+  car_name:       string
+  plate_number:   string
+  car_grade:      CarGrade
+  monthly_count:  MonthlyCount
+  repeat_mode:    RepeatMode   // 월1회 전용
+  start_date:     string
+  end_date:       string
+  base_date:      string
   interior_count: number
+  is_new_customer: boolean
 }
 
 const emptyVehicle = (): VehicleForm => ({
-  car_name:      '',
-  plate_number:  '',
-  car_grade:     'mid_suv',
-  monthly_count: 'monthly_2',
-  repeat_mode:   'date',
-  start_date:    '',
-  end_date:      '',
-  base_date:     new Date().toISOString().split('T')[0],
+  car_name:       '',
+  plate_number:   '',
+  car_grade:      'mid_suv',
+  monthly_count:  'monthly_2',
+  repeat_mode:    'date',
+  start_date:     '',
+  end_date:       '',
+  base_date:      new Date().toISOString().split('T')[0],
   interior_count: 0,
+  is_new_customer: true,
 })
 
 export default function NewCustomerPage() {
@@ -126,9 +128,10 @@ export default function NewCustomerPage() {
             repeat_mode:   v.repeat_mode,
             monthly_price,
             unit_price,
-            start_date:    v.start_date || v.base_date,
-            end_date:      v.end_date || null,
-            interior_count: v.interior_count,
+            start_date:      v.start_date || v.base_date,
+            end_date:        v.end_date || null,
+            interior_count:  v.interior_count,
+            is_new_customer: v.is_new_customer,
             status,
           })
           .select()
@@ -302,6 +305,19 @@ function VehicleCard({
           </button>
         )}
       </div>
+
+      {/* 신규차량 탭 */}
+      <button
+        type="button"
+        onClick={() => onUpdate(idx, 'is_new_customer', !v.is_new_customer)}
+        className={`w-full mb-3 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
+          v.is_new_customer
+            ? 'bg-rose-50 border-rose-400 text-rose-600'
+            : 'bg-gray-50 border-gray-200 text-gray-400'
+        }`}
+      >
+        {v.is_new_customer ? '★ 신규차량 (첫 작업 무료)' : '신규차량 아님'}
+      </button>
 
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">

@@ -41,6 +41,7 @@ export interface Vehicle {
   status: VehicleStatus
   interior_count: number | null
   is_legacy: boolean | null
+  is_new_customer: boolean | null
   created_at: string
   customer?: Customer
 }
