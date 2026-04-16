@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical, RefreshCw } from 'lucide-react'
 import { DndContext, closestCenter, type DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { createClient, db } from '@/lib/supabase/client'
+import { generateSchedules, parseLocalDate, getDateLabel, getWeekdayLabel, type RepeatMode } from '@/lib/schedule/generator'
 import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleWithVehicle = Schedule & {
@@ -520,6 +521,7 @@ export default function CalendarPage() {
                           onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
                           selectedDate={selectedDate}
                           supabaseClient={supabase}
+                          onRepeatReset={fetchSchedules}
                         />
                       </SortableRow>
                     ))}
@@ -536,6 +538,7 @@ export default function CalendarPage() {
                       onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
                       selectedDate={selectedDate}
                       supabaseClient={supabase}
+                      onRepeatReset={fetchSchedules}
                     />
                   ))}
                 </div>
@@ -571,7 +574,7 @@ function SortableRow({ id, children }: { id: string; children: React.ReactNode }
 
 /* ─── 일정 행 ─── */
 function ScheduleRow({
-  schedule, onDelete, onDateChange, onInteriorToggle, selectedDate, supabaseClient,
+  schedule, onDelete, onDateChange, onInteriorToggle, selectedDate, supabaseClient, onRepeatReset,
 }: {
   schedule: ScheduleWithVehicle
   onDelete: () => void
@@ -579,10 +582,15 @@ function ScheduleRow({
   onInteriorToggle: () => void
   selectedDate: string
   supabaseClient: ReturnType<typeof createClient>
+  onRepeatReset: () => void
 }) {
   const [done,           setDone]           = useState(false)
   const [editingDate,    setEditingDate]    = useState(false)
   const [newDate,        setNewDate]        = useState(schedule.scheduled_date)
+  const [showRepeat,     setShowRepeat]     = useState(false)
+  const [repeatBase,     setRepeatBase]     = useState(schedule.scheduled_date)
+  const [repeatMode,     setRepeatMode]     = useState<RepeatMode>((schedule.vehicle?.repeat_mode as RepeatMode) ?? 'date')
+  const [repeatSaving,   setRepeatSaving]   = useState(false)
 
   useEffect(() => {
     async function check() {
@@ -603,6 +611,42 @@ function ScheduleRow({
       onDateChange(newDate)
     }
     setEditingDate(false)
+  }
+
+  async function saveRepeatReset() {
+    const v = schedule.vehicle
+    if (!v || !repeatBase) return
+    const mc = v.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4'
+    if (mc === 'onetime') return
+    setRepeatSaving(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      // 오늘 이후 미래 일정 모두 삭제
+      await db().from('schedules')
+        .update({ is_deleted: true })
+        .eq('vehicle_id', v.id)
+        .gte('scheduled_date', today)
+      // 새 기준일로 24개월치 재생성
+      const base = parseLocalDate(repeatBase)
+      const items = generateSchedules(v.id, base, mc, repeatMode, 24)
+      // 오늘 이후 것만 insert
+      const future = items.filter(s => s.scheduled_date >= today)
+      if (future.length > 0) {
+        await db().from('schedules').insert(future.map(s => ({
+          vehicle_id: s.vehicle_id,
+          scheduled_date: s.scheduled_date,
+          schedule_type: 'regular',
+          is_overcount: s.is_overcount ?? false,
+          is_deleted: false,
+        })))
+      }
+      // vehicle의 repeat_mode 업데이트
+      await db().from('vehicles').update({ repeat_mode: repeatMode }).eq('id', v.id)
+      setShowRepeat(false)
+      onRepeatReset()
+    } finally {
+      setRepeatSaving(false)
+    }
   }
 
   const v = schedule.vehicle
@@ -707,7 +751,60 @@ function ScheduleRow({
               <Sofa size={10} />
               {schedule.has_interior ? '실내有 ✓' : '실내有 추가'}
             </button>
+            {/* 반복 재설정 (비정기 제외) */}
+            {v?.monthly_count !== 'onetime' && (
+              <button
+                onClick={() => { setShowRepeat(p => !p); setRepeatBase(schedule.scheduled_date) }}
+                className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
+              >
+                <RefreshCw size={10} />
+                반복 재설정
+              </button>
+            )}
           </div>
+
+          {/* 반복 재설정 패널 */}
+          {showRepeat && (
+            <div className="mt-2 bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-semibold text-purple-800">반복 일정 재설정</p>
+              <p className="text-xs text-purple-600">이 날짜부터 오늘 이후 일정을 모두 새로 생성합니다</p>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-600 shrink-0">새 기준일</label>
+                <input
+                  type="date"
+                  value={repeatBase}
+                  onChange={e => setRepeatBase(e.target.value)}
+                  className="text-xs border border-purple-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                />
+              </div>
+              {v?.monthly_count === 'monthly_1' && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRepeatMode('date')}
+                    className={`flex-1 text-xs py-1.5 rounded border font-medium ${repeatMode === 'date' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                  >
+                    매월 {repeatBase ? parseLocalDate(repeatBase).getDate() : '?'}일
+                  </button>
+                  <button
+                    onClick={() => setRepeatMode('weekday')}
+                    className={`flex-1 text-xs py-1.5 rounded border font-medium ${repeatMode === 'weekday' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                  >
+                    {repeatBase ? getWeekdayLabel(parseLocalDate(repeatBase)) : '요일 기준'}
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={saveRepeatReset}
+                  disabled={repeatSaving || !repeatBase}
+                  className="flex-1 bg-purple-600 text-white py-1.5 rounded text-xs font-semibold hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {repeatSaving ? '생성 중...' : '재설정'}
+                </button>
+                <button onClick={() => setShowRepeat(false)} className="px-3 py-1.5 rounded text-xs text-gray-500 hover:bg-gray-100">취소</button>
+              </div>
+            </div>
+          )}
 
         </div>
 

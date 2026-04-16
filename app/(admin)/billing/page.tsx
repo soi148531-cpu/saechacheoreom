@@ -13,6 +13,7 @@ import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, PaymentM
 interface VehicleBilling {
   vehicle: Vehicle
   records: WashRecord[]
+  scheduledDates: string[]   // 이달 예정 날짜 (schedules 테이블)
   extraItems: BillingItem[]
   washTotal: number
   extraTotal: number
@@ -208,7 +209,7 @@ export default function BillingPage() {
     const startDate = `${y}-${m}-01`
     const endDate   = new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]
 
-    const [vRes, rRes, bRes] = await Promise.all([
+    const [vRes, rRes, bRes, sRes] = await Promise.all([
       supabase.from('vehicles').select('*, customer:customers(*)'),
       supabase.from('wash_records')
         .select('*')
@@ -218,11 +219,17 @@ export default function BillingPage() {
       supabase.from('billings')
         .select('*, items:billing_items(*)')
         .eq('year_month', yearMonth),
+      supabase.from('schedules')
+        .select('vehicle_id, scheduled_date')
+        .gte('scheduled_date', startDate)
+        .lte('scheduled_date', endDate)
+        .eq('is_deleted', false),
     ])
 
     const vehicles = (vRes.data ?? []) as Array<Vehicle & { customer: Customer }>
     const records = (rRes.data ?? []) as WashRecord[]
     const billings = (bRes.data ?? []) as any[]
+    const scheduleData = (sRes.data ?? []) as Array<{ vehicle_id: string; scheduled_date: string }>
 
     // 차량별 청구 정보 구성 (청구 월 이전 종료/세차없는 차량 제외)
     const vehicleBillings: Record<string, VehicleBilling> = {}
@@ -238,9 +245,14 @@ export default function BillingPage() {
       const extraItems = (billing?.items ?? []) as BillingItem[]
       const washTotal = vehicleRecords.reduce((s, r) => s + r.price, 0)
       const extraTotal = extraItems.reduce((s, i) => s + i.amount, 0)
+      const scheduledDates = scheduleData
+        .filter(s => s.vehicle_id === v.id)
+        .map(s => s.scheduled_date)
+        .sort()
       vehicleBillings[v.id] = {
         vehicle: v,
         records: vehicleRecords,
+        scheduledDates,
         extraItems,
         washTotal,
         extraTotal,
@@ -739,9 +751,12 @@ export default function BillingPage() {
                     const isVehicleSelected = selectedVehicleId === v.id
                     const isAdding = showAddForm === v.id
                     const newItem = addingItem[v.id] ?? { name: '', price: '', qty: '1' }
-                    const target = ({ monthly_1: 1, monthly_2: 2, monthly_4: 4, onetime: 1 } as Record<string, number>)[v.monthly_count] ?? 1
-                    const actual = vb.records.length
-                    const done = actual >= target
+                    const washDateSet = new Set(vb.records.map(r => r.wash_date))
+                    // 예정 날짜 기준으로 표시 (있으면 예정 기준, 없으면 실적 기준 폴백)
+                    const displayDates = vb.scheduledDates.length > 0
+                      ? vb.scheduledDates
+                      : vb.records.map(r => r.wash_date)
+                    const allDone = displayDates.length > 0 && displayDates.every(d => washDateSet.has(d))
 
                     return (
                       <div key={v.id} className="px-3 py-2.5">
@@ -751,12 +766,27 @@ export default function BillingPage() {
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-semibold text-gray-900 text-sm">{v.car_name}</span>
                               <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{v.plate_number}</span>
-                              <span className={`flex items-center gap-0.5 text-xs font-medium ${done ? 'text-green-600' : 'text-blue-500'}`}>
-                                {Array.from({ length: target }, (_, i) => (
-                                  <span key={i} className={i < actual ? (done ? 'text-green-500' : 'text-blue-400') : 'text-gray-300'}>●</span>
-                                ))}
-                                <span className="ml-0.5">{actual}/{target}{done ? ' ✓' : ''}</span>
-                              </span>
+                              {/* 예정 날짜별 완료 표시 */}
+                              {displayDates.map(date => {
+                                const isDone = washDateSet.has(date)
+                                const d = new Date(date)
+                                const label = `${d.getMonth()+1}/${d.getDate()}`
+                                return (
+                                  <span
+                                    key={date}
+                                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                      isDone
+                                        ? 'bg-green-100 text-green-600 line-through opacity-60'
+                                        : 'bg-blue-50 text-blue-600'
+                                    }`}
+                                  >
+                                    {label}
+                                  </span>
+                                )
+                              })}
+                              {allDone && displayDates.length > 0 && (
+                                <span className="text-xs text-green-600 font-medium">✓완료</span>
+                              )}
                             </div>
                             <div className="text-xs text-gray-400 mt-0.5">
                               {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
