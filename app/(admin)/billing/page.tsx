@@ -109,7 +109,9 @@ function BillingStatistics({ stats, yearMonth }: { stats: BillingStats; yearMont
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border-2 border-green-500 shadow-md">
           <p className="text-xs text-gray-600 mb-1 font-semibold">실제 입금액</p>
           <p className="text-lg font-bold text-green-700">{formatPrice(stats.totalPaidAmount)}</p>
-          <p className="text-xs text-green-600 mt-1 font-medium">입금완료: {stats.paidCount}대</p>
+          <p className="text-xs text-green-600 mt-1 font-medium">
+            {stats.partialCount > 0 && `부분납 ${stats.partialCount}대 | `}완납 {stats.paidCount}대
+          </p>
         </div>
 
         {/* 미입금액 */}
@@ -181,7 +183,7 @@ export default function BillingPage() {
   const [paymentModal, setPaymentModal] = useState<VehicleBilling | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card' | 'cash_receipt'>('all')
   const [messageFilter, setMessageFilter] = useState<MessageFilter>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'paid'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'partial' | 'paid'>('all')
   const [modalPaymentDate, setModalPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [modalPaymentMethod, setModalPaymentMethod] = useState<'cash' | 'card' | 'cash_receipt'>('cash')
 
@@ -321,7 +323,8 @@ export default function BillingPage() {
   }, [allCustomers, searchQuery, paymentFilter, messageFilter])
 
   const displayedCustomers = useMemo(() => {
-    if (statusFilter === 'unpaid') return filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus !== 'paid'))
+    if (statusFilter === 'unpaid') return filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'unpaid'))
+    if (statusFilter === 'partial') return filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'partial'))
     if (statusFilter === 'paid') return filteredCustomers.filter(c => c.vehicles.every(v => v.paymentStatus === 'paid'))
     return filteredCustomers
   }, [filteredCustomers, statusFilter])
@@ -531,7 +534,8 @@ export default function BillingPage() {
   }
 
   const totalCustomers = filteredCustomers.length
-  const totalUnpaid = filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus !== 'paid')).length
+  const totalUnpaid = filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'unpaid')).length
+  const totalPartial = filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'partial')).length
   const totalPaid = filteredCustomers.filter(c => c.vehicles.every(v => v.paymentStatus === 'paid')).length
   const billingStats = useMemo(() => calculateBillingStats(allCustomers), [allCustomers])
 
@@ -616,13 +620,13 @@ export default function BillingPage() {
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-4 gap-2 mb-5">
         <button
-          onClick={() => setStatusFilter(statusFilter === 'all' ? 'all' : 'all')}
+          onClick={() => setStatusFilter('all')}
           className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'all' ? 'bg-gray-100 border-gray-400 ring-2 ring-gray-400' : 'bg-white border-gray-200 hover:border-gray-400'}`}
         >
           <div className="text-2xl font-bold text-gray-900">{totalCustomers}</div>
-          <div className="text-xs text-gray-500 mt-0.5">전체 고객</div>
+          <div className="text-xs text-gray-500 mt-0.5">전체</div>
         </button>
         <button
           onClick={() => setStatusFilter(prev => prev === 'unpaid' ? 'all' : 'unpaid')}
@@ -632,11 +636,18 @@ export default function BillingPage() {
           <div className="text-xs text-red-500 mt-0.5">미입금</div>
         </button>
         <button
+          onClick={() => setStatusFilter(prev => prev === 'partial' ? 'all' : 'partial')}
+          className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'partial' ? 'bg-yellow-100 border-yellow-400 ring-2 ring-yellow-400' : 'bg-yellow-50 border-yellow-100 hover:border-yellow-400'}`}
+        >
+          <div className="text-2xl font-bold text-yellow-600">{totalPartial}</div>
+          <div className="text-xs text-yellow-600 mt-0.5">부분납</div>
+        </button>
+        <button
           onClick={() => setStatusFilter(prev => prev === 'paid' ? 'all' : 'paid')}
           className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'paid' ? 'bg-green-100 border-green-400 ring-2 ring-green-400' : 'bg-green-50 border-green-100 hover:border-green-400'}`}
         >
           <div className="text-2xl font-bold text-green-600">{totalPaid}</div>
-          <div className="text-xs text-green-500 mt-0.5">입금완료</div>
+          <div className="text-xs text-green-500 mt-0.5">완납</div>
         </button>
       </div>
 
