@@ -8,9 +8,9 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { href: '/dashboard',  label: '캘린더',   icon: CalendarDays },
   { href: '/customers',  label: '고객관리',  icon: Users },
-  { href: '/billing',    label: '청구현황',  icon: Receipt },
-  { href: '/payroll',    label: '정산관리',  icon: Receipt },
-  { href: '/history',    label: '이력조회',  icon: History },
+  { href: '/billing',    label: '청구발송',  icon: Receipt },
+  { href: '/payroll',    label: '급여정산',  icon: Receipt },
+  { href: '/history',    label: '고객이력조회', icon: History },
   { href: '/stats',      label: '통계',      icon: BarChart2 },
   { href: '/settings',   label: '설정',      icon: Settings },
 ]

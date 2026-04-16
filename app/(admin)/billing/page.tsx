@@ -181,6 +181,7 @@ export default function BillingPage() {
   const [paymentModal, setPaymentModal] = useState<VehicleBilling | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card' | 'cash_receipt'>('all')
   const [messageFilter, setMessageFilter] = useState<MessageFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'paid'>('all')
   const [modalPaymentDate, setModalPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [modalPaymentMethod, setModalPaymentMethod] = useState<'cash' | 'card' | 'cash_receipt'>('cash')
 
@@ -319,6 +320,12 @@ export default function BillingPage() {
     return result
   }, [allCustomers, searchQuery, paymentFilter, messageFilter])
 
+  const displayedCustomers = useMemo(() => {
+    if (statusFilter === 'unpaid') return filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus !== 'paid'))
+    if (statusFilter === 'paid') return filteredCustomers.filter(c => c.vehicles.every(v => v.paymentStatus === 'paid'))
+    return filteredCustomers
+  }, [filteredCustomers, statusFilter])
+
   async function ensureBilling(vb: VehicleBilling): Promise<string> {
     if (vb.billingId) return vb.billingId
     const { data } = await db()
@@ -348,8 +355,13 @@ export default function BillingPage() {
       total_amount: vb.totalAmount,
       wash_count: vb.records.length,
     }
-    if (paidAt !== undefined) updateData.paid_at = paidAt
-    if (payMethod !== undefined) updateData.payment_method = payMethod
+    if (status === 'unpaid') {
+      updateData.paid_at = null
+      updateData.payment_method = null
+    } else {
+      if (paidAt !== undefined) updateData.paid_at = paidAt
+      if (payMethod !== undefined) updateData.payment_method = payMethod
+    }
 
     if (vb.billingId) {
       await db().from('billings').update(updateData).eq('id', vb.billingId)
@@ -519,8 +531,8 @@ export default function BillingPage() {
   }
 
   const totalCustomers = filteredCustomers.length
-  const totalUnpaid = filteredCustomers.reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus !== 'paid').length, 0)
-  const totalPaid = filteredCustomers.reduce((s, c) => s + c.vehicles.filter(v => v.paymentStatus === 'paid').length, 0)
+  const totalUnpaid = filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus !== 'paid')).length
+  const totalPaid = filteredCustomers.filter(c => c.vehicles.every(v => v.paymentStatus === 'paid')).length
   const billingStats = useMemo(() => calculateBillingStats(allCustomers), [allCustomers])
 
   return (
@@ -605,29 +617,40 @@ export default function BillingPage() {
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'all' ? 'all' : 'all')}
+          className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'all' ? 'bg-gray-100 border-gray-400 ring-2 ring-gray-400' : 'bg-white border-gray-200 hover:border-gray-400'}`}
+        >
           <div className="text-2xl font-bold text-gray-900">{totalCustomers}</div>
           <div className="text-xs text-gray-500 mt-0.5">전체 고객</div>
-        </div>
-        <div className="bg-red-50 rounded-xl border border-red-100 p-3 text-center">
+        </button>
+        <button
+          onClick={() => setStatusFilter(prev => prev === 'unpaid' ? 'all' : 'unpaid')}
+          className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'unpaid' ? 'bg-red-100 border-red-400 ring-2 ring-red-400' : 'bg-red-50 border-red-100 hover:border-red-400'}`}
+        >
           <div className="text-2xl font-bold text-red-600">{totalUnpaid}</div>
           <div className="text-xs text-red-500 mt-0.5">미입금</div>
-        </div>
-        <div className="bg-green-50 rounded-xl border border-green-100 p-3 text-center">
+        </button>
+        <button
+          onClick={() => setStatusFilter(prev => prev === 'paid' ? 'all' : 'paid')}
+          className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'paid' ? 'bg-green-100 border-green-400 ring-2 ring-green-400' : 'bg-green-50 border-green-100 hover:border-green-400'}`}
+        >
           <div className="text-2xl font-bold text-green-600">{totalPaid}</div>
           <div className="text-xs text-green-500 mt-0.5">입금완료</div>
-        </div>
+        </button>
       </div>
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">불러오는 중...</div>
-      ) : filteredCustomers.length === 0 ? (
+      ) : displayedCustomers.length === 0 ? (
         <div className="text-center py-12 text-gray-400 text-sm">
-          {searchQuery ? '검색 결과가 없습니다' : '이번 달 세차 실적이 없습니다'}
+          {statusFilter !== 'all' ? (
+            <span>해당 항목이 없습니다 <button onClick={() => setStatusFilter('all')} className="underline text-blue-500">전체 보기</button></span>
+          ) : searchQuery ? '검색 결과가 없습니다' : '이번 달 세차 실적이 없습니다'}
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredCustomers.map(cb => {
+          {displayedCustomers.map(cb => {
             const isExpanded = selectedCustomerId === cb.customerId
             const unPaidVehicles = cb.vehicles.filter(v => v.paymentStatus !== 'paid').length
             return (
@@ -924,7 +947,7 @@ export default function BillingPage() {
                                       onClick={() => updatePaymentStatus(vb, 'unpaid')}
                                       className="text-xs px-2 py-1 rounded font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
                                     >
-                                      미입금
+                                      {vb.paymentStatus === 'paid' ? '입금취소' : '미입금'}
                                     </button>
                                   </div>
                                 )}
