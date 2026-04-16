@@ -32,6 +32,7 @@ export interface Vehicle {
   plate_number: string
   car_grade: CarGrade
   monthly_count: MonthlyCount
+  repeat_mode: string | null
   monthly_price: number | null
   unit_price: number | null
   custom_price: number | null
