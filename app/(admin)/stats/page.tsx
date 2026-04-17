@@ -37,35 +37,80 @@ function monthlyDelta(vehicles: Vehicle[], year: number, month: number) {
 
 interface Bar { label: string; count: number; revenue: number }
 
-function BarChart({ data }: { data: Bar[] }) {
+function BarChart({ data, view }: { data: Bar[]; view: ViewMode }) {
+  const [selected, setSelected] = useState<number | null>(null)
   const maxCount = Math.max(...data.map(d => d.count), 1)
-  const showEvery = data.length > 15 ? 5 : data.length > 8 ? 2 : 1
+  const maxRevenue = Math.max(...data.map(d => d.revenue), 1)
+
+  // 일간은 막대 위에 건수 표시 (데이터 있는 것만), 월간/주간은 선택시 표시
+  const showLabelOnBar = view === 'daily'
+
   return (
     <div>
-      <div className="flex items-end gap-0.5 h-36">
+      {/* 선택된 바 상세 표시 */}
+      {selected !== null && data[selected] && (
+        <div className="mb-3 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 flex items-center justify-between">
+          <span className="text-sm font-semibold text-orange-800">{data[selected].label}</span>
+          <div className="flex gap-4">
+            <span className="text-sm text-gray-700"><span className="font-bold text-orange-700">{data[selected].count}건</span></span>
+            <span className="text-sm font-bold text-blue-700">{formatPrice(data[selected].revenue)}</span>
+          </div>
+          <button onClick={() => setSelected(null)} className="text-xs text-gray-400 hover:text-gray-600 ml-2">✕</button>
+        </div>
+      )}
+
+      {/* 막대 그래프 */}
+      <div className="flex items-end gap-0.5 h-40">
         {data.map((d, i) => {
           const pct = Math.round((d.count / maxCount) * 100)
+          const isSelected = selected === i
           return (
             <div
               key={i}
-              className="flex-1 flex flex-col items-center justify-end"
+              className="flex-1 flex flex-col items-center justify-end cursor-pointer"
               style={{ height: '100%' }}
-              title={`${d.label}: ${d.count}건 / ${formatPrice(d.revenue)}`}
+              onClick={() => setSelected(selected === i ? null : i)}
             >
+              {/* 건수 레이블 */}
+              {d.count > 0 && (showLabelOnBar || isSelected) && (
+                <span className="text-[9px] font-bold text-orange-600 mb-0.5 leading-none">{d.count}</span>
+              )}
+              {/* 막대 */}
               <div
-                className={`w-full rounded-t-sm transition-all ${d.count > 0 ? 'bg-orange-300 hover:bg-orange-400' : 'bg-gray-100'}`}
-                style={{ height: `${Math.max(pct, 3)}%` }}
+                className={`w-full rounded-t-sm transition-all ${
+                  d.count === 0 ? 'bg-gray-100' :
+                  isSelected ? 'bg-orange-500' : 'bg-orange-300 hover:bg-orange-400'
+                }`}
+                style={{ height: `${Math.max(pct, d.count > 0 ? 4 : 2)}%` }}
               />
             </div>
           )
         })}
       </div>
+
+      {/* X축 레이블 */}
       <div className="flex gap-0.5 mt-1 border-t border-gray-100 pt-1">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center overflow-hidden">
-            <span className="text-[9px] text-gray-400 leading-none">{i % showEvery === 0 ? d.label : ''}</span>
-          </div>
-        ))}
+        {data.map((d, i) => {
+          // 일간: 5일 단위, 주간: 전부, 월간: 전부
+          const show = view === 'daily'
+            ? (i === 0 || (i + 1) % 5 === 0 || i === data.length - 1)
+            : true
+          return (
+            <div key={i} className="flex-1 text-center overflow-hidden">
+              <span className={`leading-none ${view === 'monthly' ? 'text-[10px]' : 'text-[9px]'} ${
+                selected === i ? 'text-orange-500 font-bold' : 'text-gray-400'
+              }`}>
+                {show ? d.label : ''}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 하단 합계 */}
+      <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+        <span>총 <span className="font-bold text-gray-800">{data.reduce((s, d) => s + d.count, 0)}건</span></span>
+        <span>매출 <span className="font-bold text-blue-700">{formatPrice(data.reduce((s, d) => s + d.revenue, 0))}</span></span>
       </div>
     </div>
   )
@@ -210,7 +255,7 @@ export default function StatsPage() {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">세차 건수</p>
                 <p className="text-xs text-gray-400">{periodLabel}</p>
               </div>
-              <BarChart data={chartData} />
+              <BarChart data={chartData} view={view} />
             </div>
 
             <div className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-3">
