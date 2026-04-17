@@ -249,10 +249,13 @@ export default function StaffPage() {
     let interiorCount = 0
     const workerTasks = tasks.filter(t => !t.selfWork)
 
-    // 아파트별로 그룹핑
+    // 아파트 이름에서 동/숫자 제거 (예: "서한이다음 621동" → "서한이다음")
+    const baseApt = (apt: string) => apt.replace(/\s*\d+동?\s*$/, '').trim() || apt
+
+    // 아파트 기본명으로 그룹핑
     const grouped: { apt: string; items: typeof workerTasks }[] = []
     workerTasks.forEach(t => {
-      const apt = t.schedule.vehicle.customer?.apartment ?? '기타'
+      const apt = baseApt(t.schedule.vehicle.customer?.apartment ?? '기타')
       const group = grouped.find(g => g.apt === apt)
       if (group) group.items.push(t)
       else grouped.push({ apt, items: [t] })
