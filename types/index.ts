@@ -8,7 +8,7 @@ export type CarGrade =
   | 'large_suv'
   | 'xlarge_suv'
 
-export type MonthlyCount = 'monthly_1' | 'monthly_2' | 'monthly_4' | 'onetime'
+export type MonthlyCount = 'monthly_1' | 'monthly_2' | 'monthly_4' | 'onetime' | 'new_customer'
 
 export type VehicleStatus = 'active' | 'paused' | 'irregular' | 'unregistered'
 
@@ -41,7 +41,6 @@ export interface Vehicle {
   status: VehicleStatus
   interior_count: number | null
   is_legacy: boolean | null
-  is_new_customer: boolean | null
   created_at: string
   customer?: Customer
 }

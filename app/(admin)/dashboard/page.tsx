@@ -591,7 +591,6 @@ function ScheduleRow({
   const [repeatBase,     setRepeatBase]     = useState(schedule.scheduled_date)
   const [repeatMode,     setRepeatMode]     = useState<RepeatMode>((schedule.vehicle?.repeat_mode as RepeatMode) ?? 'date')
   const [repeatSaving,   setRepeatSaving]   = useState(false)
-  const [isNew,          setIsNew]          = useState<boolean>(!!schedule.vehicle?.is_new_customer)
 
   useEffect(() => {
     async function check() {
@@ -651,16 +650,6 @@ function ScheduleRow({
     }
   }
 
-  async function toggleNewCustomer() {
-    if (!schedule.vehicle) return
-    const next = !isNew
-    setIsNew(next)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabaseClient as any).from('vehicles')
-      .update({ is_new_customer: next })
-      .eq('id', schedule.vehicle_id)
-  }
-
   const v = schedule.vehicle
 
   return (
@@ -692,9 +681,9 @@ function ScheduleRow({
                 ◆ 기존
               </span>
             )}
-            {isNew && (
+            {v?.monthly_count === 'new_customer' && (
               <span className="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-medium">
-                ★ 신규첫작업
+                ★ 신규차량
               </span>
             )}
             {schedule.has_interior && (
@@ -768,19 +757,8 @@ function ScheduleRow({
               <Sofa size={10} />
               {schedule.has_interior ? '실내有 ✓' : '실내有 추가'}
             </button>
-            {/* 신규첫작업 표시 토글 */}
-            <button
-              onClick={toggleNewCustomer}
-              className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded transition-colors ${
-                isNew
-                  ? 'bg-rose-100 text-rose-600 hover:bg-rose-200'
-                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-              }`}
-            >
-              ★ 신규첫작업 표시
-            </button>
-            {/* 반복 재설정 (비정기 제외) */}
-            {v?.monthly_count !== 'onetime' && (
+            {/* 반복 재설정 (비정기/신규차량 제외) */}
+            {v?.monthly_count !== 'onetime' && v?.monthly_count !== 'new_customer' && (
               <button
                 onClick={() => { setShowRepeat(p => !p); setRepeatBase(schedule.scheduled_date) }}
                 className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"

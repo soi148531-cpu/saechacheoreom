@@ -12,10 +12,11 @@ export const CAR_GRADE_LABELS: Record<CarGrade, string> = {
 }
 
 export const MONTHLY_COUNT_LABELS: Record<MonthlyCount, string> = {
-  monthly_1: '월1회',
-  monthly_2: '월2회',
-  monthly_4: '월4회',
-  onetime:   '비정기',
+  new_customer: '신규차량',
+  monthly_1:    '월1회',
+  monthly_2:    '월2회',
+  monthly_4:    '월4회',
+  onetime:      '비정기',
 }
 
 // 월 정기 가격표 (월횟수 → 차량등급 → 월정가)
@@ -53,13 +54,13 @@ export const WORKER_BASE_RATE = WORKER_RATES.OUTDOOR
 
 // 월 정가 조회
 export function getMonthlyPrice(grade: CarGrade, monthlyCount: MonthlyCount): number {
-  if (monthlyCount === 'onetime') return ONETIME_PRICE_TABLE[grade]
+  if (monthlyCount === 'onetime' || monthlyCount === 'new_customer') return ONETIME_PRICE_TABLE[grade]
   return MONTHLY_PRICE_TABLE[monthlyCount]?.[grade] ?? 0
 }
 
 // 1회 단가 계산
 export function getUnitPrice(grade: CarGrade, monthlyCount: MonthlyCount): number {
-  if (monthlyCount === 'onetime') return ONETIME_PRICE_TABLE[grade]
+  if (monthlyCount === 'onetime' || monthlyCount === 'new_customer') return ONETIME_PRICE_TABLE[grade]
   const countMap: Record<string, number> = { monthly_1: 1, monthly_2: 2, monthly_4: 4 }
   const count = countMap[monthlyCount] ?? 1
   const monthly = MONTHLY_PRICE_TABLE[monthlyCount]?.[grade] ?? 0

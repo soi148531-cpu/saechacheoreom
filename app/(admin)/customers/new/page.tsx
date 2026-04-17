@@ -29,20 +29,18 @@ interface VehicleForm {
   end_date:       string
   base_date:      string
   interior_count: number
-  is_new_customer: boolean
 }
 
 const emptyVehicle = (): VehicleForm => ({
   car_name:       '',
   plate_number:   '',
   car_grade:      'mid_suv',
-  monthly_count:  'monthly_2',
+  monthly_count:  'new_customer',
   repeat_mode:    'date',
   start_date:     '',
   end_date:       '',
   base_date:      new Date().toISOString().split('T')[0],
   interior_count: 0,
-  is_new_customer: true,
 })
 
 export default function NewCustomerPage() {
@@ -63,11 +61,11 @@ export default function NewCustomerPage() {
   // 차량 목록
   const [vehicles, setVehicles] = useState<VehicleForm[]>([emptyVehicle()])
 
-  function updateVehicle(idx: number, field: keyof VehicleForm, value: string | boolean) {
+  function updateVehicle(idx: number, field: keyof VehicleForm, value: string) {
     setVehicles(prev =>
       prev.map((v, i) => i === idx ? {
         ...v,
-        [field]: typeof value === 'boolean' ? value : field === 'interior_count' ? Number(value) : value
+        [field]: field === 'interior_count' ? Number(value) : value
       } : v)
     )
   }
@@ -109,16 +107,13 @@ export default function NewCustomerPage() {
       for (const v of vehicles) {
         if (!v.car_name.trim() || !v.plate_number.trim()) continue
 
-        const monthly_price = v.monthly_count === 'onetime'
-          ? null
-          : getMonthlyPrice(v.car_grade, v.monthly_count)
-        const unit_price = v.monthly_count === 'onetime'
-          ? 0
+        const isNoSchedule = v.monthly_count === 'onetime' || v.monthly_count === 'new_customer'
+        const monthly_price = isNoSchedule ? null : getMonthlyPrice(v.car_grade, v.monthly_count)
+        const unit_price    = isNoSchedule ? 0
           : getMonthlyPrice(v.car_grade, v.monthly_count) / (v.monthly_count === 'monthly_1' ? 1 : v.monthly_count === 'monthly_2' ? 2 : 4)
-        const status     = v.monthly_count === 'onetime' ? 'irregular' : 'active'
+        const status        = isNoSchedule ? 'irregular' : 'active'
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: vehicle, error: vErr } = await (supabase as any)
+        const { data: vehicle, error: vErr } = await supabase
           .from('vehicles')
           .insert({
             customer_id:   customer.id,
@@ -129,10 +124,9 @@ export default function NewCustomerPage() {
             repeat_mode:   v.repeat_mode,
             monthly_price,
             unit_price,
-            start_date:      v.start_date || v.base_date,
-            end_date:        v.end_date || null,
-            interior_count:  v.interior_count,
-            is_new_customer: v.is_new_customer,
+            start_date:    v.start_date || v.base_date,
+            end_date:      v.end_date || null,
+            interior_count: v.interior_count,
             status,
           })
           .select()
@@ -140,8 +134,8 @@ export default function NewCustomerPage() {
 
         if (vErr) throw vErr
 
-        // 3. 일정 자동 생성 (비정기 제외)
-        if (v.monthly_count !== 'onetime') {
+        // 3. 일정 자동 생성 (비정기/신규차량 제외)
+        if (v.monthly_count !== 'onetime' && v.monthly_count !== 'new_customer') {
           const baseDate = parseLocalDate(v.base_date)
           const schedules = generateSchedules(
             vehicle.id,
@@ -275,7 +269,7 @@ function VehicleCard({
 }: {
   v: VehicleForm
   idx: number
-  onUpdate: (i: number, f: keyof VehicleForm, val: string | boolean) => void
+  onUpdate: (i: number, f: keyof VehicleForm, val: string) => void
   onRemove: (i: number) => void
   showRemove: boolean
 }) {
@@ -306,19 +300,6 @@ function VehicleCard({
           </button>
         )}
       </div>
-
-      {/* 신규차량 탭 */}
-      <button
-        type="button"
-        onClick={() => onUpdate(idx, 'is_new_customer', !v.is_new_customer)}
-        className={`w-full mb-3 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
-          v.is_new_customer
-            ? 'bg-rose-50 border-rose-400 text-rose-600'
-            : 'bg-gray-50 border-gray-200 text-gray-400'
-        }`}
-      >
-        {v.is_new_customer ? '★ 신규차량 (첫 작업 무료)' : '신규차량 아님'}
-      </button>
 
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
