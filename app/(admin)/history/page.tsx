@@ -41,7 +41,7 @@ export default function HistoryPage() {
 
   // ── 이력 조회 탭
   const [query,    setQuery]    = useState('')
-  const [result,   setResult]   = useState<HistoryResult | null>(null)
+  const [results,  setResults]  = useState<HistoryResult[]>([])
   const [loading,  setLoading]  = useState(false)
   const [searched, setSearched] = useState(false)
 
@@ -59,39 +59,41 @@ export default function HistoryPage() {
     setSearched(true)
 
     const q = query.trim()
-    let customerId: string | null = null
+    const customerIds = new Set<string>()
 
+    // 1. 이름으로 검색 — limit 없이 전체
     const { data: customerByName } = await supabase
-      .from('customers').select('*').ilike('name', `%${q}%`).limit(1)
-    if (customerByName && customerByName.length > 0) {
-      customerId = (customerByName[0] as Customer).id
-    } else {
-      const { data: vehicleByPlate } = await supabase
-        .from('vehicles').select('*').ilike('plate_number', `%${q}%`).limit(1)
-      if (vehicleByPlate && vehicleByPlate.length > 0) {
-        customerId = (vehicleByPlate[0] as Vehicle).customer_id
-      }
-    }
+      .from('customers').select('id').ilike('name', `%${q}%`)
+    ;(customerByName ?? []).forEach((c: { id: string }) => customerIds.add(c.id))
 
-    if (!customerId) { setResult(null); setLoading(false); return }
+    // 2. 번호판으로 검색 — limit 없이 전체
+    const { data: vehicleByPlate } = await supabase
+      .from('vehicles').select('customer_id').ilike('plate_number', `%${q}%`)
+    ;(vehicleByPlate ?? []).forEach((v: { customer_id: string }) => customerIds.add(v.customer_id))
 
-    const { data: customerData } = await supabase
-      .from('customers').select('*, vehicles(*)').eq('id', customerId).single()
-    if (!customerData) { setResult(null); setLoading(false); return }
+    if (customerIds.size === 0) { setResults([]); setLoading(false); return }
 
-    const customer = customerData as Customer
-    const vehicles = (customer.vehicles ?? []) as Vehicle[]
+    // 3. 매칭된 모든 고객 조회
+    const { data: customersData } = await supabase
+      .from('customers').select('*, vehicles(*)').in('id', Array.from(customerIds))
+    if (!customersData || customersData.length === 0) { setResults([]); setLoading(false); return }
 
-    const vehicleHistories: VehicleHistory[] = await Promise.all(
-      vehicles.map(async (vehicle) => {
-        const { data: records } = await supabase
-          .from('wash_records').select('*').eq('vehicle_id', vehicle.id)
-          .order('wash_date', { ascending: false })
-        return { vehicle, records: (records ?? []) as WashRecord[] }
+    const allResults: HistoryResult[] = await Promise.all(
+      (customersData as Customer[]).map(async (customer) => {
+        const vehicles = (customer.vehicles ?? []) as Vehicle[]
+        const vehicleHistories: VehicleHistory[] = await Promise.all(
+          vehicles.map(async (vehicle) => {
+            const { data: records } = await supabase
+              .from('wash_records').select('*').eq('vehicle_id', vehicle.id)
+              .order('wash_date', { ascending: false })
+            return { vehicle, records: (records ?? []) as WashRecord[] }
+          })
+        )
+        return { customer, vehicleHistories }
       })
     )
 
-    setResult({ customer, vehicleHistories })
+    setResults(allResults)
     setLoading(false)
   }
 
@@ -169,10 +171,8 @@ export default function HistoryPage() {
     setTimeout(() => setCopied(false), 2500)
   }
 
-  const totalRecords = result?.vehicleHistories.reduce((sum, vh) => sum + vh.records.length, 0) ?? 0
-  const totalAmount  = result?.vehicleHistories.reduce(
-    (sum, vh) => sum + vh.records.reduce((s, r) => s + r.price, 0), 0
-  ) ?? 0
+  const totalRecords = results.reduce((sum, res) => sum + res.vehicleHistories.reduce((s, vh) => s + vh.records.length, 0), 0)
+  const totalAmount  = results.reduce((sum, res) => sum + res.vehicleHistories.reduce((s, vh) => s + vh.records.reduce((a, r) => a + r.price, 0), 0), 0)
   const taxTotal = taxRows.reduce((sum, r) => sum + r.price, 0)
 
   return (
@@ -219,14 +219,19 @@ export default function HistoryPage() {
 
           {loading && <div className="text-center py-8 text-gray-400">검색 중...</div>}
 
-          {!loading && searched && !result && (
+          {!loading && searched && results.length === 0 && (
             <div className="text-center py-8 text-gray-400 text-sm">
               일치하는 고객 또는 차량이 없습니다
             </div>
           )}
 
-          {result && !loading && (
-            <div>
+          {results.length > 0 && !loading && (
+            <div className="space-y-6">
+              {results.map((result) => {
+              const rTotalRecords = result.vehicleHistories.reduce((s, vh) => s + vh.records.length, 0)
+              const rTotalAmount  = result.vehicleHistories.reduce((s, vh) => s + vh.records.reduce((a, r) => a + r.price, 0), 0)
+              return (
+              <div key={result.customer.id}>
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5">
                 <div className="flex items-center gap-2 mb-1">
                   <User size={15} className="text-blue-500" />
@@ -239,7 +244,7 @@ export default function HistoryPage() {
                     <Car size={13} className="text-blue-400" />
                     차량 {result.vehicleHistories.length}대
                   </span>
-                  <span>전체 이력 {totalRecords}건 · 총 {formatPrice(totalAmount)}</span>
+                  <span>전체 이력 {rTotalRecords}건 · 총 {formatPrice(rTotalAmount)}</span>
                 </div>
               </div>
 
@@ -329,6 +334,9 @@ export default function HistoryPage() {
                   )
                 })}
               </div>
+            </div>
+              )
+            })}
             </div>
           )}
         </div>
