@@ -33,6 +33,7 @@ interface TaskItem {
   workerName: string | null   // 실제 작업자 이름
   editingAdminNote: boolean
   selfWork: boolean  // 사장이 직접 작업 → 카톡 복사 제외
+  skipped: boolean   // 보류 처리 → 하단 보류 섹션으로 이동
 }
 
 export default function StaffPage() {
@@ -45,6 +46,7 @@ export default function StaffPage() {
   const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(null)
   const [savingKey,    setSavingKey]    = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
+  const [skippedOpen,  setSkippedOpen]  = useState(false)
 
   // 월간 일정/완료 데이터
   const [monthlySchedules,  setMonthlySchedules]  = useState<{ vehicle_id: string; scheduled_date: string }[]>([])
@@ -154,6 +156,7 @@ export default function StaffPage() {
         workerName:       record?.completed_by ?? null,
         editingAdminNote: false,
         selfWork:         false,
+        skipped:          false,
       }
     })
 
@@ -249,7 +252,7 @@ export default function StaffPage() {
     const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량`
     const lines: string[] = [header]
     let interiorCount = 0
-    const workerTasks = tasks.filter(t => !t.selfWork)
+    const workerTasks = tasks.filter(t => !t.selfWork && !t.skipped)
 
     // 아파트 이름에서 동/숫자 제거 (예: "서한이다음 621동" → "서한이다음")
     const baseApt = (apt: string) => apt.replace(/\s*\d+동?\s*$/, '').trim() || apt
@@ -293,7 +296,9 @@ export default function StaffPage() {
     })
   }
 
-  const completedCount = tasks.filter(t => t.done).length
+  const activeTasks  = tasks.filter(t => !t.skipped)
+  const skippedTasks = tasks.filter(t => t.skipped)
+  const completedCount = activeTasks.filter(t => t.done).length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -320,14 +325,14 @@ export default function StaffPage() {
                 className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700"
               />
               <p className="text-xs text-gray-500 mt-0.5">
-                {completedCount} / {tasks.length} 완료
+                {completedCount} / {activeTasks.length} 완료{skippedTasks.length > 0 && ` (보류 ${skippedTasks.length})`}
               </p>
             </div>
           </div>
         </div>
-        {tasks.length > 0 && (
+        {activeTasks.length > 0 && (
           <div className="h-1 bg-gray-100">
-            <div className="h-1 bg-blue-500 transition-all" style={{ width: `${(completedCount / tasks.length) * 100}%` }} />
+            <div className="h-1 bg-blue-500 transition-all" style={{ width: `${(completedCount / activeTasks.length) * 100}%` }} />
           </div>
         )}
       </div>
@@ -355,39 +360,86 @@ export default function StaffPage() {
             <p className="text-sm">오늘 예약된 차량이 없습니다</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {tasks.map((task, idx) => {
-              const vId = task.schedule.vehicle_id
-              const vSchedules = monthlySchedules
-                .filter(s => s.vehicle_id === vId)
-                .map(s => s.scheduled_date)
-                .sort()
-              const vWashSet = new Set(
-                monthlyWashDates.filter(w => w.vehicle_id === vId).map(w => w.wash_date)
-              )
-              return (
-                <TaskCard
-                  key={task.schedule.id}
-                  task={task}
-                  isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
-                  canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
-                  monthlyDates={vSchedules}
-                  monthlyWashSet={vWashSet}
-                  onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
-                  onCancel={() => toggleDone(idx)}
-                  onSelfWorkToggle={() => updateTask(idx, { selfWork: !task.selfWork })}
-                  onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
-                  onMemoChange={v => updateTask(idx, { memo: v })}
-                  onMemoSave={() => saveWorkerMemo(idx)}
-                  onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
-                  onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
-                  onAdminNoteSave={() => saveAdminNote(idx)}
-                  onAdminNoteCancel={() => updateTask(idx, { editingAdminNote: false })}
-                  onExpand={() => updateTask(idx, { expanded: !task.expanded })}
-                />
-              )
-            })}
-          </div>
+          <>
+            <div className="space-y-3">
+              {activeTasks.map((task) => {
+                const idx = tasks.indexOf(task)
+                const vId = task.schedule.vehicle_id
+                const vSchedules = monthlySchedules
+                  .filter(s => s.vehicle_id === vId)
+                  .map(s => s.scheduled_date)
+                  .sort()
+                const vWashSet = new Set(
+                  monthlyWashDates.filter(w => w.vehicle_id === vId).map(w => w.wash_date)
+                )
+                return (
+                  <TaskCard
+                    key={task.schedule.id}
+                    task={task}
+                    isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
+                    canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
+                    monthlyDates={vSchedules}
+                    monthlyWashSet={vWashSet}
+                    onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
+                    onCancel={() => toggleDone(idx)}
+                    onSelfWorkToggle={() => updateTask(idx, { selfWork: !task.selfWork })}
+                    onSkip={() => updateTask(idx, { skipped: true, expanded: false })}
+                    onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
+                    onMemoChange={v => updateTask(idx, { memo: v })}
+                    onMemoSave={() => saveWorkerMemo(idx)}
+                    onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
+                    onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
+                    onAdminNoteSave={() => saveAdminNote(idx)}
+                    onAdminNoteCancel={() => updateTask(idx, { editingAdminNote: false })}
+                    onExpand={() => updateTask(idx, { expanded: !task.expanded })}
+                  />
+                )
+              })}
+            </div>
+
+            {/* 보류 섹션 */}
+            {skippedTasks.length > 0 && (
+              <div className="mt-4 border border-dashed border-gray-300 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setSkippedOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 text-sm font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base">⏸</span>
+                    보류 {skippedTasks.length}건 (차량 못 찾음 등)
+                  </span>
+                  <span className="text-gray-400">{skippedOpen ? '▲' : '▼'}</span>
+                </button>
+                {skippedOpen && (
+                  <div className="divide-y divide-gray-100">
+                    {skippedTasks.map((task) => {
+                      const idx = tasks.indexOf(task)
+                      const v = task.schedule.vehicle
+                      return (
+                        <div key={task.schedule.id} className="flex items-center gap-3 px-4 py-3 bg-white">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm text-gray-500">{v.car_name}</span>
+                              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{v.plate_number}</span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {v.customer?.name} · {v.customer?.apartment}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => updateTask(idx, { skipped: false, expanded: false })}
+                            className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 font-medium transition-colors"
+                          >
+                            복원
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -418,7 +470,7 @@ export default function StaffPage() {
 /* ─── 작업 카드 ─── */
 function TaskCard({
   task, onToggleWorker, onCancel,
-  onSelfWorkToggle, onInteriorToggle,
+  onSelfWorkToggle, onSkip, onInteriorToggle,
   onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
   onExpand, isSaving, canPersistAdminNote,
@@ -428,6 +480,7 @@ function TaskCard({
   onToggleWorker: () => void
   onCancel: () => void
   onSelfWorkToggle: () => void
+  onSkip: () => void
   onInteriorToggle: () => void
   onMemoChange: (v: string) => void
   onMemoSave: () => void
@@ -535,6 +588,14 @@ function TaskCard({
           >
             {task.selfWork ? '직접✓' : '직접'}
           </button>
+          {!task.done && (
+            <button
+              onClick={onSkip}
+              className="text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-400 hover:bg-red-50 hover:border-red-200 hover:text-red-400 font-medium transition-colors"
+            >
+              보류
+            </button>
+          )}
         </div>
       </div>
 
