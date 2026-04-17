@@ -238,7 +238,7 @@ export default function StaffPage() {
     if (!date || tasks.length === 0) return ''
     const d = new Date(date + 'T00:00:00')
     const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량`
-    const lines: string[] = [header]
+    const lines: string[] = [header, '']
     let interiorCount = 0
     const workerTasks = tasks.filter(t => !t.selfWork)
     workerTasks.forEach(t => {
@@ -249,8 +249,8 @@ export default function StaffPage() {
         interiorCount++
       }
     })
-    const total = workerTasks.length
-    const outdoor = total - interiorCount
+    const outdoor = workerTasks.length
+    const total = outdoor + interiorCount
     lines.push('')
     lines.push(`${total}대`)
     lines.push(`실외${outdoor}`)
