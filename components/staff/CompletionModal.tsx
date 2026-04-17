@@ -41,20 +41,13 @@ export default function CompletionModal({
 }: CompletionModalProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('')
-  const [completedAt, setCompletedAt] = useState('')
+  // 완료 시각은 서버에서 KST 기준으로 자동 기록
   const [workType, setWorkType] = useState<WorkType>('exterior')
   const [interiorOnlyPrice, setInteriorOnlyPrice] = useState<number>(20000)
   const [memo, setMemo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // 현재 시간 초기값 설정
-  useEffect(() => {
-    const now = new Date()
-    const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
-    setCompletedAt(`${hours}:${minutes}`)
-  }, [])
 
   // 직원 목록 불러오기 — 모달이 열릴 때 1회만 실행
   useEffect(() => {
@@ -108,8 +101,6 @@ export default function CompletionModal({
     try {
       const finalPrice = calculatePrice()
       const wash_date = scheduled_date
-      const [hours, mins] = completedAt.split(':')
-      const completedAtISO = `${wash_date}T${hours}:${mins}:00`
 
       const response = await fetch('/api/wash-records/create', {
         method: 'POST',
@@ -123,7 +114,6 @@ export default function CompletionModal({
           worker_id: selectedWorkerId,
           worked_by: 'worker',
           completed_by: selectedWorkerObj.name,
-          completed_at: completedAtISO,
           memo: memo.trim() || null,
         }),
       })
@@ -194,19 +184,6 @@ export default function CompletionModal({
                 ))}
               </select>
             )}
-          </div>
-
-          {/* 완료 시각 */}
-          <div className="border-t border-gray-100 pt-3">
-            <label className="block text-xs font-bold text-gray-700 mb-2">
-              완료 시각
-            </label>
-            <input
-              type="time"
-              value={completedAt}
-              onChange={(e) => setCompletedAt(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-            />
           </div>
 
           {/* 작업 유형 */}

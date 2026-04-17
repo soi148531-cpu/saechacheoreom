@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     } = body
 
     // 필수 필드 검증
-    if (!vehicle_id || !wash_date || !price || !worked_by) {
+    if (!vehicle_id || !wash_date || price === undefined || price === null || !worked_by) {
       return NextResponse.json(
         { error: '필수 필드 누락' },
         { status: 400 }
