@@ -81,17 +81,22 @@ export default function PayrollPage() {
   }
 
   const handleGeneratePayroll = async () => {
-    if (confirm(`${yearMonth} 정산 데이터를 생성하시겠습니까?`)) {
+    const hasData = payrolls.length > 0
+    const msg = hasData
+      ? `${yearMonth} 정산을 재계산합니다.\n지급완료 항목은 유지되고, 미지급 항목만 다시 계산됩니다.`
+      : `${yearMonth} 정산 데이터를 생성하시겠습니까?`
+    if (confirm(msg)) {
       try {
         const response = await fetch('/api/payroll/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ year_month: yearMonth })
         })
-
-        if (response.ok) {
-          alert('정산 데이터가 생성되었습니다')
+        const result = await response.json()
+        if (response.ok || result.success) {
           fetchPayrolls()
+        } else {
+          alert(result.message || '정산 생성 실패')
         }
       } catch (error) {
         console.error('정산 생성 실패:', error)
@@ -324,7 +329,7 @@ export default function PayrollPage() {
                   onClick={handleGeneratePayroll}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
                 >
-                  정산 생성
+                  {payrolls.length > 0 ? '재계산' : '정산 생성'}
                 </button>
                 {selectedItems.size > 0 && (
                   <button
@@ -460,15 +465,33 @@ export default function PayrollPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            <button
-                              onClick={() => {
-                                setSelectedPayroll(payroll)
-                                setShowDetailModal(true)
-                              }}
-                              className="text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              상세보기
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedPayroll(payroll)
+                                  setShowDetailModal(true)
+                                }}
+                                className="text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                상세보기
+                              </button>
+                              {payroll.status === 'unpaid' && (
+                                <button
+                                  onClick={() => handlePaymentProcess(payroll.id, '계좌이체')}
+                                  className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 font-medium"
+                                >
+                                  지급완료
+                                </button>
+                              )}
+                              {payroll.status === 'paid' && (
+                                <button
+                                  onClick={() => handleCancelPayment(payroll.id)}
+                                  className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded hover:bg-gray-300 font-medium"
+                                >
+                                  지급취소
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))

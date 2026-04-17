@@ -173,15 +173,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 5. 정산 데이터 저장 (기존 데이터 있으면 건너뛰기)
+    // 5. 기존 미지급 정산 삭제 후 재생성 (upsert)
     if (existingPayrolls && existingPayrolls.length > 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: `${year_month} 정산 데이터가 이미 존재합니다`
-        },
-        { status: 400 }
+      // 미지급 항목만 삭제 (지급완료는 유지)
+      const { data: unpaidPayrolls } = await supabase
+        .from('worker_payrolls')
+        .select('id')
+        .eq('year_month', year_month)
+        .is('paid_at', null)
+
+      if (unpaidPayrolls && unpaidPayrolls.length > 0) {
+        await supabase
+          .from('worker_payrolls')
+          .delete()
+          .in('id', unpaidPayrolls.map((p: any) => p.id))
+      }
+
+      // 이미 지급완료된 worker_id는 재생성 제외
+      const { data: paidPayrolls } = await supabase
+        .from('worker_payrolls')
+        .select('worker_id')
+        .eq('year_month', year_month)
+        .not('paid_at', 'is', null)
+
+      const paidWorkerIds = new Set((paidPayrolls || []).map((p: any) => p.worker_id))
+      payrollsToCreate.splice(0, payrollsToCreate.length,
+        ...payrollsToCreate.filter(p => !paidWorkerIds.has(p.worker_id))
       )
+    }
+
+    if (payrollsToCreate.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: '지급완료 항목 외에 재계산할 데이터가 없습니다 (이미 지급완료)',
+        data: []
+      })
     }
 
     const { data: createdPayrolls, error: createError } = await supabase
