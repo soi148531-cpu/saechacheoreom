@@ -31,6 +31,7 @@ interface TaskItem {
   expanded: boolean
   washRecordId: string | null
   editingAdminNote: boolean
+  selfWork: boolean  // 사장이 직접 작업 → 카톡 복사 제외
 }
 
 export default function StaffPage() {
@@ -150,6 +151,7 @@ export default function StaffPage() {
         expanded:         !record,
         washRecordId:     record?.id ?? null,
         editingAdminNote: false,
+        selfWork:         false,
       }
     })
 
@@ -238,7 +240,8 @@ export default function StaffPage() {
     const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량`
     const lines: string[] = [header]
     let interiorCount = 0
-    tasks.forEach(t => {
+    const workerTasks = tasks.filter(t => !t.selfWork)
+    workerTasks.forEach(t => {
       const plateShort = t.schedule.vehicle.plate_number.slice(-4)
       lines.push(`${t.schedule.vehicle.car_name} ${plateShort}`)
       if (t.schedule.has_interior) {
@@ -246,7 +249,7 @@ export default function StaffPage() {
         interiorCount++
       }
     })
-    const total = tasks.length
+    const total = workerTasks.length
     const outdoor = total - interiorCount
     lines.push('')
     lines.push(`${total}대`)
@@ -345,6 +348,7 @@ export default function StaffPage() {
                   monthlyWashSet={vWashSet}
                   onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
                   onCancel={() => toggleDone(idx)}
+                  onSelfWorkToggle={() => updateTask(idx, { selfWork: !task.selfWork })}
                   onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
                   onMemoChange={v => updateTask(idx, { memo: v })}
                   onMemoSave={() => saveWorkerMemo(idx)}
@@ -387,7 +391,7 @@ export default function StaffPage() {
 /* ─── 작업 카드 ─── */
 function TaskCard({
   task, onToggleWorker, onCancel,
-  onInteriorToggle,
+  onSelfWorkToggle, onInteriorToggle,
   onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
   onExpand, isSaving, canPersistAdminNote,
@@ -396,6 +400,7 @@ function TaskCard({
   task: TaskItem
   onToggleWorker: () => void
   onCancel: () => void
+  onSelfWorkToggle: () => void
   onInteriorToggle: () => void
   onMemoChange: (v: string) => void
   onMemoSave: () => void
@@ -484,9 +489,21 @@ function TaskCard({
           )}
         </div>
 
-        <button onClick={onExpand} className="text-gray-400 flex-shrink-0">
-          {task.expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <button onClick={onExpand} className="text-gray-400">
+            {task.expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+          <button
+            onClick={onSelfWorkToggle}
+            className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
+              task.selfWork
+                ? 'bg-amber-100 border-amber-300 text-amber-700'
+                : 'bg-gray-50 border-gray-200 text-gray-400'
+            }`}
+          >
+            {task.selfWork ? '직접✓' : '직접'}
+          </button>
+        </div>
       </div>
 
       {/* 상세 (펼침) */}
