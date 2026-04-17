@@ -30,6 +30,7 @@ interface TaskItem {
   interiorDone: boolean
   expanded: boolean
   washRecordId: string | null
+  workerName: string | null   // 실제 작업자 이름
   editingAdminNote: boolean
   selfWork: boolean  // 사장이 직접 작업 → 카톡 복사 제외
 }
@@ -150,6 +151,7 @@ export default function StaffPage() {
         interiorDone:     prevInteriorDone,
         expanded:         !record,
         washRecordId:     record?.id ?? null,
+        workerName:       record?.completed_by ?? null,
         editingAdminNote: false,
         selfWork:         false,
       }
@@ -476,6 +478,11 @@ function TaskCard({
             {!task.schedule.has_interior && (v.interior_count ?? 0) > 0 && (
               <span className="flex items-center gap-0.5 text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-medium border border-green-200">
                 <Sofa size={10} />실내{v.interior_count}회
+              </span>
+            )}
+            {task.done && task.workerName && (
+              <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium">
+                {task.workerName}
               </span>
             )}
             {task.adminNote && (
