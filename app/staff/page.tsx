@@ -156,10 +156,17 @@ export default function StaffPage() {
     })
 
     items.sort((a, b) => {
-      const sa = a.schedule.sort_order, sb = b.schedule.sort_order
-      if (sa != null && sb != null) return sa - sb
-      if (sa != null) return -1
-      if (sb != null) return 1
+      const va = a.schedule.vehicle, vb = b.schedule.vehicle
+      const aptA = va.customer?.apartment ?? ''
+      const aptB = vb.customer?.apartment ?? ''
+      if (aptA !== aptB) return aptA.localeCompare(aptB, 'ko')
+      // 동호수: 숫자 추출해서 정렬
+      const unitA = va.customer?.unit_number ?? ''
+      const unitB = vb.customer?.unit_number ?? ''
+      const numA = parseInt(unitA.replace(/\D/g, '') || '0')
+      const numB = parseInt(unitB.replace(/\D/g, '') || '0')
+      if (numA !== numB) return numA - numB
+      // 같은 고객이면 created_at 순
       return new Date(a.schedule.created_at).getTime() - new Date(b.schedule.created_at).getTime()
     })
 
@@ -242,8 +249,7 @@ export default function StaffPage() {
     let interiorCount = 0
     const workerTasks = tasks.filter(t => !t.selfWork)
     workerTasks.forEach(t => {
-      const plateShort = t.schedule.vehicle.plate_number.slice(-4)
-      lines.push(`${t.schedule.vehicle.car_name} ${plateShort}`)
+      lines.push(`${t.schedule.vehicle.car_name} ${t.schedule.vehicle.plate_number}`)
       if (t.schedule.has_interior) {
         lines.push('내부')
         interiorCount++
