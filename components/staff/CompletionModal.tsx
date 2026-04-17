@@ -102,10 +102,7 @@ export default function CompletionModal({
       return
     }
 
-    if (workType === 'interior_only' && interiorOnlyPrice <= 0) {
-      setError('실내 작업 금액을 입력해주세요.')
-      return
-    }
+    // 0원 허용 (서비스/무료 처리 가능)
 
     setLoading(true)
     try {
@@ -249,8 +246,8 @@ export default function CompletionModal({
                   onChange={() => setWorkType('interior_only')}
                   className="mr-2"
                 />
-                <span className="text-sm font-semibold text-orange-700">실내 전용</span>
-                <span className="text-xs text-orange-500 ml-2">(가격 직접 입력)</span>
+                <span className="text-sm font-semibold text-orange-700">맞춤 작업</span>
+                <span className="text-xs text-orange-500 ml-2">(가격 직접 입력 · 0원 서비스 포함)</span>
               </label>
             </div>
 
@@ -258,7 +255,7 @@ export default function CompletionModal({
             {workType === 'interior_only' && (
               <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                 <label className="block text-xs font-medium text-orange-800 mb-1">
-                  실내 작업 금액
+                  작업 금액 (0원 입력 시 서비스로 기록)
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -271,7 +268,7 @@ export default function CompletionModal({
                   />
                   <span className="text-sm text-orange-700 whitespace-nowrap">원</span>
                 </div>
-                <p className="text-xs text-orange-600 mt-1">고객과 협상한 금액으로 변경하세요</p>
+                <p className="text-xs text-orange-600 mt-1">서비스(무료)는 0원 그대로 완료 처리하세요</p>
               </div>
             )}
           </div>
@@ -285,7 +282,7 @@ export default function CompletionModal({
               {calculatePrice().toLocaleString()}원
             </p>
             {workType === 'interior_only' && (
-              <p className="text-xs text-orange-600 mt-1">실내 전용 작업</p>
+              <p className="text-xs text-orange-600 mt-1">{calculatePrice() === 0 ? '서비스 (무료)' : '맞춤 작업'}</p>
             )}
           </div>
 
