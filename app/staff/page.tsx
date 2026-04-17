@@ -245,20 +245,36 @@ export default function StaffPage() {
     if (!date || tasks.length === 0) return ''
     const d = new Date(date + 'T00:00:00')
     const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량`
-    const lines: string[] = [header, '']
+    const lines: string[] = [header]
     let interiorCount = 0
     const workerTasks = tasks.filter(t => !t.selfWork)
+
+    // 아파트별로 그룹핑
+    const grouped: { apt: string; items: typeof workerTasks }[] = []
     workerTasks.forEach(t => {
-      lines.push(`${t.schedule.vehicle.car_name} ${t.schedule.vehicle.plate_number}`)
-      if (t.schedule.has_interior) {
-        lines.push('내부')
-        interiorCount++
-      }
+      const apt = t.schedule.vehicle.customer?.apartment ?? '기타'
+      const group = grouped.find(g => g.apt === apt)
+      if (group) group.items.push(t)
+      else grouped.push({ apt, items: [t] })
     })
+
+    grouped.forEach(({ apt, items }) => {
+      lines.push('')
+      lines.push(`[${apt}]`)
+      items.forEach(t => {
+        const v = t.schedule.vehicle
+        lines.push(`${v.car_name} - ${v.plate_number}`)
+        if (t.schedule.has_interior) {
+          lines.push('내부')
+          interiorCount++
+        }
+      })
+    })
+
     const outdoor = workerTasks.length
     const total = outdoor + interiorCount
     lines.push('')
-    lines.push(`${total}대`)
+    lines.push(`${total}대중${outdoor}대완료`)
     lines.push(`실외${outdoor}`)
     lines.push(`실내${interiorCount}`)
     return lines.join('\n')
