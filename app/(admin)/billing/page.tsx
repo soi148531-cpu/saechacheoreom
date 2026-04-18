@@ -412,7 +412,8 @@ export default function BillingPage() {
     const amount = parseInt(raw.replace(/,/g, ''), 10)
     if (isNaN(amount) || amount <= 0) return
     setPartialInput(prev => { const n = { ...prev }; delete n[vb.vehicle.id]; return n })
-    await updatePaymentStatus(vb, 'partial', amount)
+    const today = new Date().toISOString().split('T')[0]
+    await updatePaymentStatus(vb, 'partial', amount, today)
   }
 
   async function addItem(vb: VehicleBilling, name: string, price: number, qty: number) {
@@ -790,7 +791,7 @@ export default function BillingPage() {
                             </div>
                             <div className="text-xs text-gray-400 mt-0.5">
                               {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
-                              {vb.paidAt && <span className="ml-1.5 text-green-700 font-medium">입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}</span>}
+                              {vb.paidAt && <span className={`ml-1.5 font-medium ${vb.paymentStatus === 'partial' ? 'text-yellow-700' : 'text-green-700'}`}>{vb.paymentStatus === 'partial' ? '부분납 ' : '입금 '}{(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}</span>}
                               {vb.paymentMethod && <span className="ml-1 text-gray-600">{PAYMENT_METHOD_LABELS[vb.paymentMethod]}</span>}
                               {vb.messageSentAt && <span className="ml-1 text-blue-500">카톡✓</span>}
                             </div>
