@@ -187,6 +187,7 @@ export default function BillingPage() {
   const [editingMemo, setEditingMemo] = useState<Record<string, string>>({})
   const [savingMemo,  setSavingMemo]  = useState<Record<string, boolean>>({})
   const [partialInput, setPartialInput] = useState<Record<string, string>>({}) // vehicleId → 입력금액
+  const [partialDate,  setPartialDate]  = useState<Record<string, string>>({}) // vehicleId → 날짜
   const [paymentModal, setPaymentModal] = useState<VehicleBilling | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card' | 'cash_receipt'>('all')
   const [messageFilter, setMessageFilter] = useState<MessageFilter>('all')
@@ -420,15 +421,17 @@ export default function BillingPage() {
     const amount = parseInt(raw.replace(/,/g, ''), 10)
     if (isNaN(amount) || amount <= 0) return
     setPartialInput(prev => { const n = { ...prev }; delete n[vb.vehicle.id]; return n })
+    setPartialDate(prev => { const n = { ...prev }; delete n[vb.vehicle.id]; return n })
     const today = new Date().toISOString().split('T')[0]
-    // 기존 이력에 오늘 납부 추가
-    const newHistory: PartialPayment[] = [...vb.partialHistory, { date: today, amount }]
+    const date = partialDate[vb.vehicle.id] || today
+    // 기존 이력에 납부 추가
+    const newHistory: PartialPayment[] = [...vb.partialHistory, { date, amount }]
     const totalPaid = newHistory.reduce((sum, p) => sum + p.amount, 0)
     const billingId = await ensureBilling(vb)
     await (db() as ReturnType<typeof db>).from('billings').update({
       payment_status: 'partial',
       paid_amount: totalPaid,
-      paid_at: today,
+      paid_at: date,
       partial_payment_history: newHistory,
       total_amount: vb.totalAmount,
       wash_count: vb.records.length,
@@ -830,8 +833,14 @@ export default function BillingPage() {
                         {/* 액션 버튼 — 항상 표시 */}
                         {partialInput[v.id] !== undefined ? (
                           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 space-y-2">
-                            <p className="text-xs font-semibold text-yellow-800">부분납 금액 입력 (전체: {formatPrice(vb.totalAmount)})</p>
+                            <p className="text-xs font-semibold text-yellow-800">부분납 입력 (전체: {formatPrice(vb.totalAmount)})</p>
                             <div className="flex items-center gap-2">
+                              <input
+                                type="date"
+                                value={partialDate[v.id] ?? new Date().toISOString().split('T')[0]}
+                                onChange={e => setPartialDate(prev => ({ ...prev, [v.id]: e.target.value }))}
+                                className="border border-yellow-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white"
+                              />
                               <div className="relative flex-1">
                                 <input
                                   type="number"
@@ -845,7 +854,7 @@ export default function BillingPage() {
                                 <span className="absolute right-2 top-1.5 text-xs text-gray-400">원</span>
                               </div>
                               <button onClick={() => confirmPartial(vb)} disabled={!partialInput[v.id]} className="bg-yellow-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-yellow-600 disabled:opacity-40">확인</button>
-                              <button onClick={() => setPartialInput(prev => { const n = { ...prev }; delete n[v.id]; return n })} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5">취소</button>
+                              <button onClick={() => { setPartialInput(prev => { const n = { ...prev }; delete n[v.id]; return n }); setPartialDate(prev => { const n = { ...prev }; delete n[v.id]; return n }) }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5">취소</button>
                             </div>
                           </div>
                         ) : isAdding ? (
