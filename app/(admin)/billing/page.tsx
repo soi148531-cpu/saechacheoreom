@@ -10,6 +10,11 @@ import { MessageButton } from '@/components/MessageButton'
 import { buildDetailedBillingMessage } from '@/lib/services/messageService'
 import type { Vehicle, WashRecord, Billing, BillingItem, PaymentStatus, PaymentMethod, Customer, MessageFilter } from '@/types'
 
+interface PartialPayment {
+  date: string   // YYYY-MM-DD
+  amount: number
+}
+
 interface VehicleBilling {
   vehicle: Vehicle
   records: WashRecord[]
@@ -25,6 +30,7 @@ interface VehicleBilling {
   sentAt: string | null
   messageSentAt: string | null
   billingId: string | null
+  partialHistory: PartialPayment[]  // 부분납 이력
 }
 
 interface CustomerBilling {
@@ -264,6 +270,7 @@ export default function BillingPage() {
         sentAt: billing?.sent_at ?? null,
         messageSentAt: billing?.message_sent_at ?? null,
         billingId: billing?.id ?? null,
+        partialHistory: (billing?.partial_payment_history as PartialPayment[]) ?? [],
       }
     })
 
@@ -373,6 +380,7 @@ export default function BillingPage() {
     if (status === 'unpaid') {
       updateData.paid_at = null
       updateData.payment_method = null
+      updateData.partial_payment_history = []
     } else {
       if (paidAt !== undefined) updateData.paid_at = paidAt
       if (payMethod !== undefined) updateData.payment_method = payMethod
@@ -413,7 +421,19 @@ export default function BillingPage() {
     if (isNaN(amount) || amount <= 0) return
     setPartialInput(prev => { const n = { ...prev }; delete n[vb.vehicle.id]; return n })
     const today = new Date().toISOString().split('T')[0]
-    await updatePaymentStatus(vb, 'partial', amount, today)
+    // 기존 이력에 오늘 납부 추가
+    const newHistory: PartialPayment[] = [...vb.partialHistory, { date: today, amount }]
+    const totalPaid = newHistory.reduce((sum, p) => sum + p.amount, 0)
+    const billingId = await ensureBilling(vb)
+    await (db() as ReturnType<typeof db>).from('billings').update({
+      payment_status: 'partial',
+      paid_amount: totalPaid,
+      paid_at: today,
+      partial_payment_history: newHistory,
+      total_amount: vb.totalAmount,
+      wash_count: vb.records.length,
+    }).eq('id', billingId)
+    fetchBilling()
   }
 
   async function addItem(vb: VehicleBilling, name: string, price: number, qty: number) {
@@ -791,7 +811,12 @@ export default function BillingPage() {
                             </div>
                             <div className="text-xs text-gray-400 mt-0.5">
                               {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
-                              {vb.paidAt && <span className={`ml-1.5 font-medium ${vb.paymentStatus === 'partial' ? 'text-yellow-700' : 'text-green-700'}`}>{vb.paymentStatus === 'partial' ? '부분납 ' : '입금 '}{(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}</span>}
+                              {vb.paymentStatus === 'partial' && vb.partialHistory.length > 0
+                                ? <span className="ml-1.5 font-medium text-yellow-700">
+                                    부분납 {vb.partialHistory.map(p => { const d = new Date(p.date); return `${d.getMonth()+1}/${d.getDate()}(${p.amount.toLocaleString()}원)` }).join(', ')}
+                                  </span>
+                                : vb.paidAt && <span className="ml-1.5 font-medium text-green-700">입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}</span>
+                              }
                               {vb.paymentMethod && <span className="ml-1 text-gray-600">{PAYMENT_METHOD_LABELS[vb.paymentMethod]}</span>}
                               {vb.messageSentAt && <span className="ml-1 text-blue-500">카톡✓</span>}
                             </div>
