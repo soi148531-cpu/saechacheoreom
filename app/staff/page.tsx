@@ -282,7 +282,7 @@ export default function StaffPage() {
     const outdoor = workerTasks.length
     const total = outdoor + interiorCount
     lines.push('')
-    lines.push(`${total}대중${outdoor}대완료`)
+    lines.push(`${total}대`)
     lines.push(`실외${outdoor}`)
     lines.push(`실내${interiorCount}`)
     return lines.join('\n')
