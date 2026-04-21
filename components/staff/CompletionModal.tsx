@@ -239,7 +239,7 @@ export default function CompletionModal({
                   고객에게 표시될 내용
                 </label>
                 <div className="flex gap-1.5 mb-2 flex-wrap">
-                  {['실내청소', '무료서비스', '서비스권'].map(preset => (
+                  {['실내청소', '무료서비스', '유료서비스'].map(preset => (
                     <button
                       key={preset}
                       type="button"
