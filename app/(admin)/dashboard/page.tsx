@@ -669,7 +669,7 @@ function ScheduleRow({
   const v = schedule.vehicle
 
   return (
-    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''} ${highlighted ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}>
+    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''} ${highlighted ? 'bg-yellow-100 border-l-4 border-yellow-500 ring-1 ring-yellow-300' : ''}`}>
       {/* 상단 행: 완료 아이콘 + 차량 정보 + 삭제 버튼 */}
       <div className="flex items-start gap-3">
         {done
