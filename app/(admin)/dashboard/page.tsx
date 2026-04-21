@@ -91,6 +91,19 @@ export default function CalendarPage() {
     return new Set(matched.map(s => s.scheduled_date))
   }, [schedules, searchQuery])
 
+  const searchMatchedIds = useMemo(() => {
+    if (!searchQuery.trim()) return new Set<string>()
+    const q = searchQuery.trim().toLowerCase()
+    return new Set(
+      schedules
+        .filter(s =>
+          s.vehicle?.plate_number?.toLowerCase().includes(q) ||
+          s.vehicle?.car_name?.toLowerCase().includes(q)
+        )
+        .map(s => s.id)
+    )
+  }, [schedules, searchQuery])
+
   const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
   const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`
 
@@ -522,6 +535,7 @@ export default function CalendarPage() {
                           selectedDate={selectedDate}
                           supabaseClient={supabase}
                           onRepeatReset={fetchSchedules}
+                          highlighted={searchMatchedIds.has(s.id)}
                         />
                       </SortableRow>
                     ))}
@@ -539,6 +553,7 @@ export default function CalendarPage() {
                       selectedDate={selectedDate}
                       supabaseClient={supabase}
                       onRepeatReset={fetchSchedules}
+                      highlighted={searchMatchedIds.has(s.id)}
                     />
                   ))}
                 </div>
@@ -574,7 +589,7 @@ function SortableRow({ id, children }: { id: string; children: React.ReactNode }
 
 /* ─── 일정 행 ─── */
 function ScheduleRow({
-  schedule, onDelete, onDateChange, onInteriorToggle, selectedDate, supabaseClient, onRepeatReset,
+  schedule, onDelete, onDateChange, onInteriorToggle, selectedDate, supabaseClient, onRepeatReset, highlighted,
 }: {
   schedule: ScheduleWithVehicle
   onDelete: () => void
@@ -583,6 +598,7 @@ function ScheduleRow({
   selectedDate: string
   supabaseClient: ReturnType<typeof createClient>
   onRepeatReset: () => void
+  highlighted?: boolean
 }) {
   const [done,           setDone]           = useState(false)
   const [editingDate,    setEditingDate]    = useState(false)
@@ -653,7 +669,7 @@ function ScheduleRow({
   const v = schedule.vehicle
 
   return (
-    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''}`}>
+    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''} ${highlighted ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}>
       {/* 상단 행: 완료 아이콘 + 차량 정보 + 삭제 버튼 */}
       <div className="flex items-start gap-3">
         {done
