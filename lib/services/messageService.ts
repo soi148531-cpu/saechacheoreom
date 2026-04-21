@@ -80,7 +80,7 @@ export async function buildDetailedBillingMessage(
   vehicleDetails: Array<{
     carName: string
     plateNumber: string
-    records: Array<{ date: string; price: number }>
+    records: Array<{ date: string; price: number; serviceType?: string; memo?: string | null }>
     subtotal: number
   }>,
   totalAmount: number
@@ -92,7 +92,8 @@ export async function buildDetailedBillingMessage(
     const lines: string[] = []
     lines.push(`[${vehicle.carName}] ${vehicle.plateNumber}`)
     vehicle.records.forEach(r => {
-      lines.push(`   ${r.date} 세차: ${formatPrice(r.price)}`)
+      const serviceLabel = r.serviceType === 'interior' ? ' (+실내)' : r.serviceType === 'interior_only' ? ` (${r.memo?.match(/^\[서비스:(.+?)\]/)?.[1] ?? '맞춤작업'})` : ''
+      lines.push(`   ${r.date} 세차${serviceLabel}: ${formatPrice(r.price)}`)
     })
     lines.push(`  소계: ${formatPrice(vehicle.subtotal)}`)
     return lines.join('\n')

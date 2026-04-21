@@ -532,7 +532,9 @@ export default function BillingPage() {
       plateNumber: vb.vehicle.plate_number || '',
       records: vb.records.map(r => ({
         date: `${monthNum}/${new Date(r.wash_date).getDate()}`,
-        price: r.price
+        price: r.price,
+        serviceType: r.service_type ?? 'regular',
+        memo: r.memo ?? null,
       })),
       subtotal: vb.totalAmount
     }))
