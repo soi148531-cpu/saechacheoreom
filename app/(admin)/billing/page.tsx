@@ -191,7 +191,7 @@ export default function BillingPage() {
   const [paymentModal, setPaymentModal] = useState<VehicleBilling | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card' | 'cash_receipt'>('all')
   const [messageFilter, setMessageFilter] = useState<MessageFilter>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'partial' | 'paid'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'partial' | 'paid' | 'wash_done'>('all')
   const [modalPaymentDate, setModalPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [modalPaymentMethod, setModalPaymentMethod] = useState<'cash' | 'card' | 'cash_receipt'>('cash')
 
@@ -342,10 +342,33 @@ export default function BillingPage() {
     return result
   }, [allCustomers, searchQuery, paymentFilter, messageFilter])
 
+  // 차량이 이달 예정 횟수를 다 채웠는지 판단
+  function isWashDone(vb: VehicleBilling): boolean {
+    const mc = vb.vehicle.monthly_count
+    if (mc === 'onetime' || mc === 'new_customer') return vb.records.length >= 1
+    const required = mc === 'monthly_1' ? 1 : mc === 'monthly_2' ? 2 : 4
+    return vb.records.length >= required
+  }
+
   const displayedCustomers = useMemo(() => {
     if (statusFilter === 'unpaid') return filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'unpaid'))
     if (statusFilter === 'partial') return filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'partial'))
     if (statusFilter === 'paid') return filteredCustomers.filter(c => c.vehicles.every(v => v.paymentStatus === 'paid'))
+    if (statusFilter === 'wash_done') {
+      // 이달 세차 다 끝난 차량이 1개 이상인 고객
+      const done = filteredCustomers
+        .map(cb => ({ ...cb, vehicles: cb.vehicles.filter(vb => isWashDone(vb)) }))
+        .filter(cb => cb.vehicles.length > 0)
+      // 정렬: 카톡미발송+미입금 → 카톡발송+미입금 → 부분납 → 완납
+      const rank = (cb: typeof done[0]) => {
+        const v = cb.vehicles[0]
+        if (v.paymentStatus === 'paid') return 3
+        if (v.paymentStatus === 'partial') return 2
+        if (v.messageSentAt) return 1
+        return 0
+      }
+      return [...done].sort((a, b) => rank(a) - rank(b))
+    }
     return filteredCustomers
   }, [filteredCustomers, statusFilter])
 
@@ -573,6 +596,7 @@ export default function BillingPage() {
   const totalUnpaid = filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'unpaid')).length
   const totalPartial = filteredCustomers.filter(c => c.vehicles.some(v => v.paymentStatus === 'partial')).length
   const totalPaid = filteredCustomers.filter(c => c.vehicles.every(v => v.paymentStatus === 'paid')).length
+  const totalWashDone = filteredCustomers.filter(c => c.vehicles.some(vb => isWashDone(vb))).length
   const billingStats = useMemo(() => calculateBillingStats(allCustomers), [allCustomers])
 
   return (
@@ -656,7 +680,7 @@ export default function BillingPage() {
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-4 gap-2 mb-5">
+      <div className="grid grid-cols-5 gap-2 mb-5">
         <button
           onClick={() => setStatusFilter('all')}
           className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'all' ? 'bg-gray-100 border-gray-400 ring-2 ring-gray-400' : 'bg-white border-gray-200 hover:border-gray-400'}`}
@@ -685,6 +709,13 @@ export default function BillingPage() {
           <div className="text-2xl font-bold text-green-600">{totalPaid}</div>
           <div className="text-xs text-green-500 mt-0.5">완납</div>
         </button>
+        <button
+          onClick={() => setStatusFilter(prev => prev === 'wash_done' ? 'all' : 'wash_done')}
+          className={`rounded-xl border p-3 text-center transition-all ${statusFilter === 'wash_done' ? 'bg-blue-100 border-blue-400 ring-2 ring-blue-400' : 'bg-blue-50 border-blue-100 hover:border-blue-400'}`}
+        >
+          <div className="text-2xl font-bold text-blue-600">{totalWashDone}</div>
+          <div className="text-xs text-blue-600 mt-0.5">세차완료</div>
+        </button>
       </div>
 
       {loading ? (
@@ -693,6 +724,7 @@ export default function BillingPage() {
         <div className="text-center py-12 text-gray-400 text-sm">
           {statusFilter !== 'all' ? (
             <span>해당 항목이 없습니다 <button onClick={() => setStatusFilter('all')} className="underline text-blue-500">전체 보기</button></span>
+
           ) : searchQuery ? '검색 결과가 없습니다' : '이번 달 세차 실적이 없습니다'}
         </div>
       ) : (
