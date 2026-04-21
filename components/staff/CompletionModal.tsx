@@ -44,6 +44,7 @@ export default function CompletionModal({
   // 완료 시각은 서버에서 KST 기준으로 자동 기록
   const [workType, setWorkType] = useState<WorkType>('exterior')
   const [interiorOnlyPrice, setInteriorOnlyPrice] = useState<number>(20000)
+  const [customLabel, setCustomLabel] = useState('실내청소')
   const [memo, setMemo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -55,6 +56,7 @@ export default function CompletionModal({
     setError('')
     setWorkType('exterior')
     setInteriorOnlyPrice(20000)
+    setCustomLabel('실내청소')
     const fetchWorkers = async () => {
       try {
         const res = await fetch('/api/workers')
@@ -114,7 +116,9 @@ export default function CompletionModal({
           worker_id: selectedWorkerId,
           worked_by: 'worker',
           completed_by: selectedWorkerObj.name,
-          memo: memo.trim() || null,
+          memo: workType === 'interior_only'
+            ? [`[서비스:${customLabel.trim() || '맞춤작업'}]`, memo.trim()].filter(Boolean).join(' ')
+            : memo.trim() || null,
         }),
       })
 
@@ -231,6 +235,32 @@ export default function CompletionModal({
             {/* 실내 전용 가격 입력 */}
             {workType === 'interior_only' && (
               <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <label className="block text-xs font-medium text-orange-800 mb-1">
+                  고객에게 표시될 내용
+                </label>
+                <div className="flex gap-1.5 mb-2 flex-wrap">
+                  {['실내청소', '무료서비스', '서비스권'].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setCustomLabel(preset)}
+                      className={`text-xs px-2 py-1 rounded border font-medium transition-colors ${
+                        customLabel === preset
+                          ? 'bg-orange-200 border-orange-400 text-orange-800'
+                          : 'bg-white border-orange-200 text-orange-600 hover:bg-orange-50'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={customLabel}
+                  onChange={e => setCustomLabel(e.target.value)}
+                  placeholder="직접 입력 (예: 실내청소, 무료서비스)"
+                  className="w-full border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-2"
+                />
                 <label className="block text-xs font-medium text-orange-800 mb-1">
                   작업 금액 (0원 입력 시 서비스로 기록)
                 </label>

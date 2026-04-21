@@ -300,10 +300,14 @@ export default function HistoryPage() {
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className="text-gray-500 w-12">{d.getMonth()+1}/{d.getDate()}</span>
                                           <span className="text-gray-700">
-                                            {r.service_type === 'interior_only' ? '실내 전용' : '세차 완료'}
+                                            {r.service_type === 'interior_only'
+                                              ? (r.memo?.match(/^\[서비스:(.+?)\]/)?.[1] ?? '맞춤작업')
+                                              : '세차 완료'}
                                           </span>
                                           {r.service_type === 'interior_only' && (
-                                            <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">실내전용</span>
+                                            <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">
+                                              {r.memo?.match(/^\[서비스:(.+?)\]/)?.[1] ?? '맞춤작업'}
+                                            </span>
                                           )}
                                           {r.service_type === 'interior' && (
                                             <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
