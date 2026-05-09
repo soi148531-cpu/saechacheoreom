@@ -14,7 +14,7 @@ import {
 import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice } from '@/lib/utils'
 import {
-  generateSchedules, getDateLabel, getWeekdayLabel, parseLocalDate,
+  generateSchedules, getDateLabel, getWeekdayLabel, getBiweeklyWeekdayLabel, parseLocalDate,
   type RepeatMode,
 } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount } from '@/types'
@@ -282,10 +282,13 @@ function VehicleCard({
 
   // 반복 방식 레이블 미리보기 (신규 기준일 기준)
   const repeatPreview = useMemo(() => {
-    if (v.monthly_count !== 'monthly_1') return null
+    if (v.monthly_count !== 'monthly_1' && v.monthly_count !== 'monthly_2') return null
     if (!v.base_date) return null
     const d = parseLocalDate(v.base_date)
-    return v.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
+    if (v.repeat_mode !== 'weekday') return getDateLabel(d)
+    return v.monthly_count === 'monthly_2'
+      ? getBiweeklyWeekdayLabel(d)
+      : getWeekdayLabel(d)
   }, [v.monthly_count, v.repeat_mode, v.base_date])
 
   return (
@@ -382,8 +385,8 @@ function VehicleCard({
           </>
         )}
 
-        {/* 월1회: 반복 방식 선택 (네이버 캘린더 방식) */}
-        {v.monthly_count === 'monthly_1' && (
+        {/* 월1회/월2회: 반복 방식 선택 (네이버 캘린더 방식) */}
+        {(v.monthly_count === 'monthly_1' || v.monthly_count === 'monthly_2') && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               반복 방식
@@ -398,7 +401,7 @@ function VehicleCard({
                     : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
                 }`}
               >
-                매월 N일
+                {v.monthly_count === 'monthly_2' ? 'N일 간격 (14일)' : '매월 N일'}
               </button>
               <button
                 type="button"
@@ -409,7 +412,7 @@ function VehicleCard({
                     : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
                 }`}
               >
-                N번째 요일
+                {v.monthly_count === 'monthly_2' ? '1·3번째 / 2·4번째 요일' : 'N번째 요일'}
               </button>
             </div>
             {repeatPreview && (

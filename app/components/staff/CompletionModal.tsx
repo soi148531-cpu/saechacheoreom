@@ -18,6 +18,7 @@ interface CompletionModalProps {
   }
   scheduled_date: string
   schedule_id: string
+  isInteriorOnly?: boolean
   onSuccess?: () => void
 }
 
@@ -43,6 +44,7 @@ export default function CompletionModal({
   customer,
   scheduled_date,
   schedule_id,
+  isInteriorOnly = false,
   onSuccess,
 }: CompletionModalProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -75,7 +77,7 @@ export default function CompletionModal({
 
     if (isOpen) {
       fetchWorkers()
-      setWorkType('exterior')
+      setWorkType(isInteriorOnly ? 'interior_only' : 'exterior')
       setInteriorOnlyPrice(20000)
     }
   }, [isOpen])
@@ -186,32 +188,41 @@ export default function CompletionModal({
 
           {/* 작업 유형 */}
           <div>
-            <label className="block text-sm font-medium mb-2">작업 유형</label>
-            <div className="space-y-2">
-              {(['exterior', 'interior_only', 'both'] as WorkType[]).map((type) => (
-                <label key={type} className="flex items-center">
-                  <input
-                    type="radio"
-                    name="work_type"
-                    value={type}
-                    checked={workType === type}
-                    onChange={() => setWorkType(type)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm">{WORK_TYPE_LABELS[type]}</span>
-                  {type === 'exterior' && (
-                    <span className="text-xs text-gray-400 ml-2">
-                      ({vehicle.unit_price.toLocaleString()}원)
-                    </span>
-                  )}
-                  {type === 'both' && (
-                    <span className="text-xs text-gray-400 ml-2">
-                      ({vehicle.unit_price.toLocaleString()} + 10,000원)
-                    </span>
-                  )}
-                </label>
-              ))}
-            </div>
+            {isInteriorOnly ? (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <span className="text-green-700 text-sm font-semibold">🛋️ 실내 전용 작업</span>
+                <span className="text-xs text-green-600">외부 세차 없음</span>
+              </div>
+            ) : (
+              <>
+                <label className="block text-sm font-medium mb-2">작업 유형</label>
+                <div className="space-y-2">
+                  {(['exterior', 'interior_only', 'both'] as WorkType[]).map((type) => (
+                    <label key={type} className="flex items-center">
+                      <input
+                        type="radio"
+                        name="work_type"
+                        value={type}
+                        checked={workType === type}
+                        onChange={() => setWorkType(type)}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">{WORK_TYPE_LABELS[type]}</span>
+                      {type === 'exterior' && (
+                        <span className="text-xs text-gray-400 ml-2">
+                          ({vehicle.unit_price.toLocaleString()}원)
+                        </span>
+                      )}
+                      {type === 'both' && (
+                        <span className="text-xs text-gray-400 ml-2">
+                          ({vehicle.unit_price.toLocaleString()} + 10,000원)
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* 실내 전용 가격 입력 */}
             {workType === 'interior_only' && (

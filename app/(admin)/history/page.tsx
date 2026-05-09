@@ -19,7 +19,8 @@ interface HistoryResult {
 
 interface TaxRow {
   id: string
-  completedAt: string   // 표시용 문자열
+  completedAt: string
+  completedAtTime: string
   description: string   // 차량명 번호판 고객명 (호수)
   price: number
   paymentMethod: string | null
@@ -129,15 +130,18 @@ export default function HistoryPage() {
       const unitPart = customer?.unit_number ? ` (${customer.unit_number})` : ''
       const description = `${vehicle?.car_name ?? ''} ${vehicle?.plate_number ?? ''} ${customer?.name ?? ''}${unitPart}`.trim()
 
-      let completedAt = r.wash_date ?? ''
+      let completedAtDate = r.wash_date ?? ''
+      let completedAtTime = ''
       if (r.completed_at) {
         const d = new Date(r.completed_at)
-        completedAt = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
+        completedAtDate = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`
+        completedAtTime = `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
       }
 
       return {
         id: r.id,
-        completedAt,
+        completedAt: completedAtDate,
+        completedAtTime,
         description,
         price: r.price ?? 0,
         paymentMethod: billingMap[r.vehicle_id] ?? null,
@@ -164,7 +168,8 @@ export default function HistoryPage() {
     const dataRows = taxRows.map((row, index) => {
       const methodLabel = row.paymentMethod ? (PAYMENT_LABELS[row.paymentMethod] ?? row.paymentMethod) : '현금'
       const monthlyTotal = index === 0 ? `₩${totalAmount.toLocaleString()}` : ''
-      return `${row.completedAt}\t${row.description}\t${row.price}\t${row.price.toLocaleString()} 원\t${methodLabel}\t승인\t${monthlyTotal}`
+      const fullDate = row.completedAtTime ? `${row.completedAt} ${row.completedAtTime}` : row.completedAt
+      return `${fullDate}\t${row.description}\t${row.price}\t${row.price.toLocaleString()} 원\t${methodLabel}\t승인\t${monthlyTotal}`
     })
     navigator.clipboard.writeText([header, ...dataRows].join('\n'))
     setCopied(true)
@@ -410,7 +415,10 @@ export default function HistoryPage() {
                 <tbody className="divide-y divide-gray-100">
                   {taxRows.map((row) => (
                     <tr key={row.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-gray-500 tabular-nums whitespace-nowrap">{row.completedAt}</td>
+                      <td className="px-3 py-2 text-gray-500 tabular-nums whitespace-nowrap">
+                        <div>{row.completedAt}</div>
+                        {row.completedAtTime && <div className="text-xs text-gray-400">{row.completedAtTime}</div>}
+                      </td>
                       <td className="px-3 py-2 text-gray-800">{row.description}</td>
                       <td className="px-3 py-2 font-medium text-gray-900 text-right tabular-nums whitespace-nowrap">
                         {row.price.toLocaleString()}

@@ -61,17 +61,18 @@ export default function CustomersPage() {
 
     // 탭 필터
     if (activeTab === 'all') return true
-    if (activeTab === 'unregistered') return vehicles.length === 0
+    if (activeTab === 'unregistered') return vehicles.length === 0 || vehicles.some(v => v.status === 'unregistered')
     return vehicles.some(v => v.status === activeTab)
   })
 
-  // 탭별 카운트
+  // 탭별 카운트 (active/paused/irregular는 차량 기준)
+  const allVehicles = customers.flatMap(c => c.vehicles ?? [])
   const counts = {
     all:          customers.length,
-    active:       customers.filter(c => c.vehicles?.some(v => v.status === 'active')).length,
-    paused:       customers.filter(c => c.vehicles?.some(v => v.status === 'paused')).length,
-    irregular:    customers.filter(c => c.vehicles?.some(v => v.status === 'irregular')).length,
-    unregistered: customers.filter(c => !c.vehicles || c.vehicles.length === 0).length,
+    active:       allVehicles.filter(v => v.status === 'active').length,
+    paused:       allVehicles.filter(v => v.status === 'paused').length,
+    irregular:    allVehicles.filter(v => v.status === 'irregular').length,
+    unregistered: customers.filter(c => !c.vehicles || c.vehicles.length === 0 || c.vehicles.some(v => v.status === 'unregistered')).length,
   }
 
   // 이번달 신규/이탈 카운트
@@ -79,7 +80,6 @@ export default function CustomersPage() {
     const n = new Date()
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
   })()
-  const allVehicles = customers.flatMap(c => c.vehicles ?? [])
   const newThisMonth  = allVehicles.filter(v => v.start_date?.startsWith(thisMonth)).length
   const exitThisMonth = allVehicles.filter(v => v.end_date?.startsWith(thisMonth)).length
 
@@ -109,6 +109,15 @@ export default function CustomersPage() {
           <p className="text-xs text-red-400 font-medium">이번달 이탈</p>
           <p className="text-lg font-bold text-red-600">{exitThisMonth}대</p>
         </div>
+      </div>
+
+      {/* 요약 */}
+      <div className="flex gap-3 mb-3 text-sm">
+        <span className="text-gray-500">고객 <span className="font-bold text-gray-800">{customers.length}명</span></span>
+        <span className="text-gray-300">|</span>
+        <span className="text-gray-500">정기차량 <span className="font-bold text-blue-600">{allVehicles.filter(v => v.status === 'active').length}대</span></span>
+        <span className="text-gray-300">|</span>
+        <span className="text-gray-500">정지 <span className="font-bold text-gray-600">{allVehicles.filter(v => v.status === 'paused').length}대</span></span>
       </div>
 
       {/* 탭 */}

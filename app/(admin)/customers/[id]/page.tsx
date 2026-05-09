@@ -13,7 +13,7 @@ import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice, formatDate } from '@/lib/utils'
-import { generateSchedules, parseLocalDate } from '@/lib/schedule/generator'
+import { generateSchedules, parseLocalDate, getBiweeklyWeekdayLabel, getWeekdayLabel, getDateLabel, type RepeatMode } from '@/lib/schedule/generator'
 import type { Customer, Vehicle, VehicleStatus, CarGrade, MonthlyCount } from '@/types'
 
 const STATUS_LABELS: Record<VehicleStatus, string> = {
@@ -52,6 +52,7 @@ export default function CustomerDetailPage() {
   const [editVPlate,       setEditVPlate]       = useState('')
   const [editVGrade,       setEditVGrade]       = useState<CarGrade>('mid_sedan')
   const [editVCount,       setEditVCount]       = useState<MonthlyCount>('monthly_1')
+  const [editVRepeatMode,  setEditVRepeatMode]  = useState<RepeatMode>('date')
   const [editVUnitPrice,   setEditVUnitPrice]   = useState('')
   const [editVCustomPrice, setEditVCustomPrice] = useState('')
   const [editVEndDate,     setEditVEndDate]     = useState('')
@@ -103,6 +104,7 @@ export default function CustomerDetailPage() {
     setEditVPlate(v.plate_number)
     setEditVGrade(v.car_grade)
     setEditVCount(v.monthly_count)
+    setEditVRepeatMode(((v as unknown as { repeat_mode?: string }).repeat_mode as RepeatMode) ?? 'date')
     setEditVUnitPrice(v.unit_price?.toString() ?? '')
     setEditVCustomPrice(v.custom_price?.toString() ?? '')
     setEditVEndDate(v.end_date ?? '')
@@ -124,6 +126,7 @@ export default function CustomerDetailPage() {
       plate_number:  editVPlate.trim().replace(/\s/g, ''),
       car_grade:     editVGrade,
       monthly_count: editVCount,
+      repeat_mode:   editVRepeatMode,
       unit_price:    unitPrice,
       monthly_price: monthlyPrice,
       custom_price:  customPrice,
@@ -376,6 +379,44 @@ export default function CustomerDetailPage() {
                       </select>
                     </div>
                   </div>
+                  {/* 반복 방식 선택 (월1회/월2회) */}
+                  {(editVCount === 'monthly_1' || editVCount === 'monthly_2') && (
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1.5">반복 방식</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditVRepeatMode('date')}
+                          className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
+                            editVRepeatMode === 'date'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
+                          {editVCount === 'monthly_2' ? 'N일 간격 (14일)' : '매월 N일'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditVRepeatMode('weekday')}
+                          className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
+                            editVRepeatMode === 'weekday'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
+                          {editVCount === 'monthly_2' ? '1·3 / 2·4번째 요일' : 'N번째 요일'}
+                        </button>
+                      </div>
+                      {editVRepeatMode === 'weekday' && (() => {
+                        // 저장된 일정에서 기준일을 알 수 없으므로 현재 repeat_mode만 표시
+                        return (
+                          <p className="mt-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
+                            {editVCount === 'monthly_2' ? '※ 기준일은 기존 일정 기준으로 유지됩니다' : '※ 저장 시 반복 방식만 변경됩니다'}
+                          </p>
+                        )
+                      })()}
+                    </div>
+                  )}
                   <div className="flex gap-2 pt-1">
                     <button onClick={saveVehicle} disabled={vehicleSaving} className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                       <Check size={14} />{vehicleSaving ? '저장 중...' : '저장'}

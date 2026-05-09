@@ -2,16 +2,24 @@
 // Plan SC: SC-02 캘린더 월2회 반복 일정 정확 생성
 
 export type RepeatMode = 'date' | 'weekday'
-// date    : 매월 N일      (예: 매월 17일)
-// weekday : 매월 N번째 요일 (예: 매월 3번째 금요일)
+// date    : 매월 N일           (예: 매월 17일)
+// weekday : 매월 N번째 요일     (월1회: 3번째 금요일 / 월2회: 1·3번째 월요일)
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토']
 
-/** 시작일로부터 "매월 N번째 요일" 설명 텍스트 생성 */
+/** 시작일로부터 "매월 N번째 요일" 설명 텍스트 생성 (월1회용) */
 export function getWeekdayLabel(startDate: Date): string {
   const nth = Math.ceil(startDate.getDate() / 7)
   const dow = WEEKDAY_KO[startDate.getDay()]
   return `매월 ${nth}번째 ${dow}요일`
+}
+
+/** 시작일로부터 "매월 1·3번째 / 2·4번째 요일" 설명 텍스트 생성 (월2회용) */
+export function getBiweeklyWeekdayLabel(startDate: Date): string {
+  const nth = Math.ceil(startDate.getDate() / 7)
+  const dow = WEEKDAY_KO[startDate.getDay()]
+  const pair = nth % 2 === 1 ? '1·3' : '2·4'
+  return `매월 ${pair}번째 ${dow}요일`
 }
 
 /** 시작일로부터 "매월 N일" 설명 텍스트 생성 */
@@ -113,6 +121,41 @@ function byInterval(
   return result
 }
 
+/**
+ * 월2회 — 매월 1·3번째 요일 또는 2·4번째 요일
+ * 시작일이 1번째/3번째 요일 → 매월 1·3번째 같은 요일
+ * 시작일이 2번째/4번째 요일 → 매월 2·4번째 같은 요일
+ * 예: 시작일=첫째 월요일 → 매월 1번째·3번째 월요일
+ */
+function monthlyTwiceByWeekday(
+  vehicleId: string,
+  startDate: Date,
+  monthsAhead: number
+): ScheduleItem[] {
+  const result: ScheduleItem[] = []
+  const targetDow = startDate.getDay()
+  const targetNth = Math.ceil(startDate.getDate() / 7)
+  // 홀수(1, 3, 5) → 1·3번째, 짝수(2, 4) → 2·4번째
+  const nths = targetNth % 2 === 1 ? [1, 3] : [2, 4]
+
+  for (let m = 0; m <= monthsAhead; m++) {
+    const firstOfMonth = new Date(startDate.getFullYear(), startDate.getMonth() + m, 1)
+    const year  = firstOfMonth.getFullYear()
+    const month = firstOfMonth.getMonth()
+    const firstDow = firstOfMonth.getDay()
+    const firstOccurrence = 1 + ((targetDow - firstDow + 7) % 7)
+
+    for (const nth of nths) {
+      const day = firstOccurrence + (nth - 1) * 7
+      const d = new Date(year, month, day)
+      if (d.getMonth() === month) {
+        result.push({ vehicle_id: vehicleId, scheduled_date: toDateStr(d) })
+      }
+    }
+  }
+  return result
+}
+
 export interface ScheduleItem {
   vehicle_id: string
   scheduled_date: string
@@ -135,9 +178,12 @@ export function generateSchedules(
     schedules = repeatMode === 'weekday'
       ? monthlyByWeekday(vehicleId, startDate, monthsAhead)
       : monthlyByDate(vehicleId, startDate, monthsAhead)
+  } else if (monthlyCount === 'monthly_2') {
+    schedules = repeatMode === 'weekday'
+      ? monthlyTwiceByWeekday(vehicleId, startDate, monthsAhead)
+      : byInterval(vehicleId, startDate, 14, monthsAhead)
   } else {
-    const interval = monthlyCount === 'monthly_2' ? 14 : 7
-    schedules = byInterval(vehicleId, startDate, interval, monthsAhead)
+    schedules = byInterval(vehicleId, startDate, 7, monthsAhead)
   }
 
   return detectOvercount(schedules)

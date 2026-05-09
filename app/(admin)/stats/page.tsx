@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/utils'
-import type { Vehicle, WashRecord, Billing } from '@/types'
+import { usePricing } from '@/lib/hooks/usePricing'
+import type { Vehicle, WashRecord, Billing, Schedule } from '@/types'
 
 type ViewMode = 'daily' | 'weekly' | 'monthly'
 
@@ -19,9 +20,9 @@ function classifyForMonth(vehicles: Vehicle[], year: number, month: number) {
   for (const v of vehicles) {
     if (v.start_date > last) continue
     if (v.end_date && v.end_date < first) continue
-    if (v.monthly_count === 'onetime') irregular.push(v)
+    if (v.monthly_count === 'onetime' || v.status === 'irregular' || v.status === 'unregistered') irregular.push(v)
     else if (v.status === 'paused') paused.push(v)
-    else active.push(v)
+    else if (v.status === 'active') active.push(v)
   }
   return { active, paused, irregular }
 }
@@ -128,7 +129,9 @@ export default function StatsPage() {
   const [vehicles,    setVehicles]    = useState<Vehicle[]>([])
   const [washRecords, setWashRecords] = useState<WashRecord[]>([])
   const [billings,    setBillings]    = useState<Billing[]>([])
+  const [schedules,   setSchedules]   = useState<Schedule[]>([])
   const [loading,     setLoading]     = useState(true)
+  const { priceTable } = usePricing()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -140,7 +143,7 @@ export default function StatsPage() {
         .lte('wash_date', `${year}-12-31`)
         .eq('is_completed', true),
       supabase.from('billings')
-        .select('paid_amount, year_month, total_amount')
+        .select('vehicle_id, paid_amount, year_month, total_amount')
         .gte('year_month', `${year}-01`)
         .lte('year_month', `${year}-12`),
     ])
@@ -150,7 +153,20 @@ export default function StatsPage() {
     setLoading(false)
   }, [supabase, year])
 
+  const fetchSchedules = useCallback(async () => {
+    const startDate = `${ymPrefix(year, month)}-01`
+    const endDate   = `${ymPrefix(year, month)}-${String(lastDayOf(year, month)).padStart(2, '0')}`
+    const { data } = await supabase
+      .from('schedules')
+      .select('*, vehicle:vehicles(unit_price)')
+      .gte('scheduled_date', startDate)
+      .lte('scheduled_date', endDate)
+      .eq('is_deleted', false)
+    if (data) setSchedules(data as Schedule[])
+  }, [supabase, year, month])
+
   useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchSchedules() }, [fetchSchedules])
 
   function prevMonth() {
     if (month === 0) { setYear(y => y - 1); setMonth(11) }
@@ -199,15 +215,44 @@ export default function StatsPage() {
 
   const { active, paused, irregular } = classifyForMonth(vehicles, year, month)
   const { newCount, exitCount } = monthlyDelta(vehicles, year, month)
-  const expectedRevenue = active.reduce((s, v) => s + (v.monthly_price ?? 0), 0)
+  const expectedRevenue = schedules.reduce((s, sch) => {
+    const unitPrice = (sch.vehicle as (Vehicle & { unit_price?: number }) | undefined)?.unit_price ?? 0
+    const interiorPrice = sch.has_interior ? priceTable.interior : 0
+    return s + unitPrice + interiorPrice
+  }, 0)
   const monthActual = monthRecords.reduce((s, r) => s + r.price, 0)
   const achieveRate = expectedRevenue > 0 ? Math.round((monthActual / expectedRevenue) * 100) : 0
 
   const monthYm = `${year}-${padMonth(month)}`
-  const monthPaidAmount = useMemo(
-    () => billings.filter(b => b.year_month === monthYm).reduce((s, b) => s + (b.paid_amount ?? 0), 0),
-    [billings, monthYm]
-  )
+  const monthPaidAmount = useMemo(() => {
+    const startDate = `${ymPrefix(year, month)}-01`
+    // 청구 현황 페이지와 동일한 기준:
+    // 1) 이번달 시작 전에 종료된 차량 제외
+    // 2) 이번달 세차 실적이 있는 차량만
+    // 3) 차량당 첫 번째 billing만 사용 (중복 방지)
+    const validVehicleIds = new Set(
+      vehicles
+        .filter(v => !v.end_date || v.end_date >= startDate)
+        .map(v => v.id)
+    )
+    const monthWashVehicleIds = new Set(
+      washRecords
+        .filter(r => r.wash_date.startsWith(ymPrefix(year, month)))
+        .map(r => r.vehicle_id)
+    )
+    const seen = new Set<string>()
+    return billings
+      .filter(b => {
+        const vid = (b as any).vehicle_id
+        if (b.year_month !== monthYm) return false
+        if (!validVehicleIds.has(vid)) return false
+        if (!monthWashVehicleIds.has(vid)) return false
+        if (seen.has(vid)) return false
+        seen.add(vid)
+        return true
+      })
+      .reduce((s, b) => s + (b.paid_amount ?? 0), 0)
+  }, [billings, monthYm, vehicles, washRecords, year, month])
 
   const periodLabel = view === 'monthly' ? `${year}년` : `${year}년 ${MONTHS_KR[month]}`
 
@@ -259,7 +304,7 @@ export default function StatsPage() {
             </div>
 
             <div className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">매출 지표</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{year}년 매출 지표</p>
               <div>
                 <p className="text-xs text-gray-400">매출 합계</p>
                 <p className="text-lg font-bold text-gray-900">{formatPrice(totalRevenue)}</p>

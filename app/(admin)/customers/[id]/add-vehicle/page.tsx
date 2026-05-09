@@ -12,7 +12,7 @@ import {
 import { usePricing } from '@/lib/hooks/usePricing'
 import { formatPrice } from '@/lib/utils'
 import {
-  generateSchedules, getDateLabel, getWeekdayLabel, parseLocalDate,
+  generateSchedules, getDateLabel, getWeekdayLabel, getBiweeklyWeekdayLabel, parseLocalDate,
   type RepeatMode,
 } from '@/lib/schedule/generator'
 import type { CarGrade, MonthlyCount, Customer } from '@/types'
@@ -94,10 +94,13 @@ export default function AddVehiclePage() {
     : 0
 
   const repeatPreview = useMemo(() => {
-    if (vehicle.monthly_count !== 'monthly_1') return null
+    if (vehicle.monthly_count !== 'monthly_1' && vehicle.monthly_count !== 'monthly_2') return null
     if (!vehicle.base_date) return null
     const d = parseLocalDate(vehicle.base_date)
-    return vehicle.repeat_mode === 'weekday' ? getWeekdayLabel(d) : getDateLabel(d)
+    if (vehicle.repeat_mode !== 'weekday') return getDateLabel(d)
+    return vehicle.monthly_count === 'monthly_2'
+      ? getBiweeklyWeekdayLabel(d)
+      : getWeekdayLabel(d)
   }, [vehicle.monthly_count, vehicle.repeat_mode, vehicle.base_date])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -264,8 +267,8 @@ export default function AddVehiclePage() {
               이 날짜를 기준으로 반복 일정이 1년치 자동 생성됩니다
             </p>
 
-            {/* 월1회: 반복 방식 선택 */}
-            {vehicle.monthly_count === 'monthly_1' && (
+            {/* 월1회/월2회: 반복 방식 선택 */}
+            {(vehicle.monthly_count === 'monthly_1' || vehicle.monthly_count === 'monthly_2') && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">반복 방식</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -278,7 +281,7 @@ export default function AddVehiclePage() {
                         : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
                     }`}
                   >
-                    매월 N일
+                    {vehicle.monthly_count === 'monthly_2' ? 'N일 간격 (14일)' : '매월 N일'}
                   </button>
                   <button
                     type="button"
@@ -289,7 +292,7 @@ export default function AddVehiclePage() {
                         : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
                     }`}
                   >
-                    N번째 요일
+                    {vehicle.monthly_count === 'monthly_2' ? '1·3번째 / 2·4번째 요일' : 'N번째 요일'}
                   </button>
                 </div>
                 {repeatPreview && (

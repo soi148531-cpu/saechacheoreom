@@ -195,20 +195,6 @@ export default function BillingPage() {
   const [modalPaymentDate, setModalPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [modalPaymentMethod, setModalPaymentMethod] = useState<'cash' | 'card' | 'cash_receipt'>('cash')
 
-  // localStorage에서 고객 메모 로드/저장
-  const getMemoKey = (customerId: string) => `billing_memo:${yearMonth}:${customerId}`
-  const loadMemo = (customerId: string) => {
-    try {
-      return localStorage.getItem(getMemoKey(customerId)) || ''
-    } catch {
-      return ''
-    }
-  }
-  const saveMemoToStorage = (customerId: string, memo: string) => {
-    try {
-      localStorage.setItem(getMemoKey(customerId), memo)
-    } catch {}
-  }
 
   const fetchBilling = useCallback(async () => {
     setLoading(true)
@@ -288,7 +274,7 @@ export default function BillingPage() {
           totalAmount: 0,
           totalRecords: 0,
           paymentStatus: 'unpaid',
-          memo: loadMemo(cid),
+          memo: customer?.memo ?? '',
         }
       }
       byCustomer[cid].vehicles.push(vb)
@@ -296,8 +282,16 @@ export default function BillingPage() {
       byCustomer[cid].totalRecords += vb.records.length
     })
 
-    setAllCustomers(Object.values(byCustomer).sort((a, b) => 
-      (a.customer.name ?? '').localeCompare(b.customer.name ?? '')
+    // 카톡 발송 최신순 정렬 (미발송은 맨 아래)
+    const latestMessageSentAt = (cb: CustomerBilling) => {
+      const times = cb.vehicles
+        .map(v => v.messageSentAt)
+        .filter(Boolean)
+        .map(t => new Date(t!).getTime())
+      return times.length > 0 ? Math.max(...times) : 0
+    }
+    setAllCustomers(Object.values(byCustomer).sort((a, b) =>
+      latestMessageSentAt(b) - latestMessageSentAt(a)
     ))
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,12 +336,26 @@ export default function BillingPage() {
     return result
   }, [allCustomers, searchQuery, paymentFilter, messageFilter])
 
-  // 차량이 이달 예정 횟수를 다 채웠는지 판단
-  function isWashDone(vb: VehicleBilling): boolean {
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  function requiredCount(vb: VehicleBilling): number {
     const mc = vb.vehicle.monthly_count
-    if (mc === 'onetime' || mc === 'new_customer') return vb.records.length >= 1
-    const required = mc === 'monthly_1' ? 1 : mc === 'monthly_2' ? 2 : 4
-    return vb.records.length >= required
+    if (mc === 'onetime' || mc === 'new_customer') return 1
+    return mc === 'monthly_1' ? 1 : mc === 'monthly_2' ? 2 : 4
+  }
+
+  // 예정일이 모두 지났는데 세차 횟수를 다 못 채운 경우 (미완료 청구)
+  function isPartialComplete(vb: VehicleBilling): boolean {
+    const required = requiredCount(vb)
+    if (vb.records.length >= required) return false
+    const allDatesPassed = vb.scheduledDates.length > 0 && vb.scheduledDates.every(d => d < todayStr)
+    return allDatesPassed && vb.records.length > 0
+  }
+
+  // 차량이 이달 청구 가능 상태인지 판단 (정상 완료 or 미완료 청구)
+  function isWashDone(vb: VehicleBilling): boolean {
+    if (vb.records.length >= requiredCount(vb)) return true
+    return isPartialComplete(vb)
   }
 
   const displayedCustomers = useMemo(() => {
@@ -493,19 +501,11 @@ export default function BillingPage() {
     const memo = editingMemo[customerId] ?? ''
     setSavingMemo(prev => ({ ...prev, [customerId]: true }))
 
-    // localStorage + DB 함께 저장
-    saveMemoToStorage(customerId, memo)
-    const customer = allCustomers.find(c => c.customerId === customerId)
-    if (customer) {
-      customer.vehicles.forEach(vb => {
-        if (vb.billingId) {
-          db().from('billings')
-            .update({ memo })
-            .eq('id', vb.billingId)
-            .catch((err: unknown) => console.error('메모 저장 실패:', err))
-        }
-      })
-    }
+    // customers 테이블에 메모 저장 (기기 간 공유)
+    db().from('customers')
+      .update({ memo })
+      .eq('id', customerId)
+      .catch((err: unknown) => console.error('메모 저장 실패:', err))
 
     // 로컬 UI 업데이트
     setAllCustomers(prev => prev.map(cb =>
@@ -550,22 +550,13 @@ export default function BillingPage() {
     alert('클립보드에 복사되었습니다. 카카오톡에 붙여넣기 하세요.')
   }
 
-  async function handleMessageUpdate(billingId: string) {
-    // 단일 항목만 새로고침 (효율성)
-    const { data } = await supabase
-      .from('billings')
-      .select('*')
-      .eq('id', billingId)
-      .single()
-
-    if (!data) return
-
-    // allCustomers 배열 업데이트
+  function handleMessageUpdate(billingId: string, vehicleId: string) {
+    const now = new Date().toISOString()
     setAllCustomers(prev => prev.map(cb => ({
       ...cb,
       vehicles: cb.vehicles.map(vb => {
-        if (vb.billingId === billingId) {
-          return { ...vb, messageSentAt: (data as any).message_sent_at }
+        if (vb.vehicle.id === vehicleId) {
+          return { ...vb, messageSentAt: now, billingId }
         }
         return vb
       })
@@ -815,6 +806,9 @@ export default function BillingPage() {
                       ? vb.scheduledDates
                       : vb.records.map(r => r.wash_date)
                     const allDone = displayDates.length > 0 && displayDates.every(d => washDateSet.has(d))
+                    const partialComplete = isPartialComplete(vb)
+                    const doneCount = vb.records.length
+                    const totalCount = requiredCount(vb)
 
                     return (
                       <div key={v.id} className="px-3 py-2.5">
@@ -827,6 +821,7 @@ export default function BillingPage() {
                               {/* 예정 날짜별 완료 표시 */}
                               {displayDates.map(date => {
                                 const isDone = washDateSet.has(date)
+                                const isPast = date < todayStr
                                 const d = new Date(date)
                                 const label = `${d.getMonth()+1}/${d.getDate()}`
                                 return (
@@ -835,7 +830,9 @@ export default function BillingPage() {
                                     className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                                       isDone
                                         ? 'bg-green-100 text-green-600 line-through opacity-60'
-                                        : 'bg-blue-50 text-blue-600'
+                                        : isPast
+                                          ? 'bg-orange-100 text-orange-600 line-through'
+                                          : 'bg-blue-50 text-blue-600'
                                     }`}
                                   >
                                     {label}
@@ -845,12 +842,18 @@ export default function BillingPage() {
                               {allDone && displayDates.length > 0 && (
                                 <span className="text-xs text-green-600 font-medium">✓완료</span>
                               )}
+                              {partialComplete && (
+                                <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full font-bold">
+                                  ⚠ {doneCount}/{totalCount}회 청구
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-gray-400 mt-0.5">
                               {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
-                              {vb.paymentStatus === 'partial' && vb.partialHistory.length > 0
+                              {vb.partialHistory.length > 0
                                 ? <span className="ml-1.5 font-medium text-yellow-700">
                                     부분납 {vb.partialHistory.map(p => { const d = new Date(p.date); return `${d.getMonth()+1}/${d.getDate()}(${p.amount.toLocaleString()}원)` }).join(', ')}
+                                    {vb.paymentStatus === 'paid' && <span className="ml-1 text-green-600">→ 완납</span>}
                                   </span>
                                 : vb.paidAt && <span className="ml-1.5 font-medium text-green-700">입금 {(() => { const d = new Date(vb.paidAt!); return `${d.getMonth()+1}/${d.getDate()}` })()}</span>
                               }
@@ -912,7 +915,7 @@ export default function BillingPage() {
                               billingId={vb.billingId}
                               messageSentAt={vb.messageSentAt}
                               onEnsureBilling={() => ensureBilling(vb)}
-                              onUpdate={handleMessageUpdate}
+                              onUpdate={(billingId) => handleMessageUpdate(billingId, v.id)}
                             />
                             <button onClick={() => openPaymentModal(vb)} className="text-xs px-2 py-1 rounded font-medium border border-green-300 text-green-700 hover:bg-green-50">완납</button>
                             <button onClick={() => setPartialInput(prev => ({ ...prev, [v.id]: String(vb.paidAmount || '') }))} className="text-xs px-2 py-1 rounded font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50">부분납</button>

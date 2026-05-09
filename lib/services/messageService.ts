@@ -109,7 +109,7 @@ export async function buildDetailedBillingMessage(
       '',
       vehicleText,
       '',
-      `총 청구금액: ${formatPrice(totalAmount)}원`,
+      `총 청구금액: ${formatPrice(totalAmount)}`,
       '입금계좌: (계좌 정보)',
     ].filter(l => l !== undefined).join('\n')
   }
@@ -120,7 +120,7 @@ export async function buildDetailedBillingMessage(
     phone: phone || '',
     month: `${month}`,
     vehicle_details: vehicleText,
-    total_amount: formatPrice(totalAmount),
+    total_amount: totalAmount.toLocaleString('ko-KR'),
   })
 }
 

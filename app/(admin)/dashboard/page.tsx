@@ -30,6 +30,7 @@ export default function CalendarPage() {
   const [searchQuery,  setSearchQuery]  = useState('')
   const [searchActive, setSearchActive] = useState(false)
   const [showAddForm,      setShowAddForm]      = useState(false)
+  const [addMode,          setAddMode]          = useState<'onetime' | 'interior'>('onetime')
   const [addVehicleSearch, setAddVehicleSearch] = useState('')
   const [reorderMode,      setReorderMode]      = useState(false)
   const [manualOrder,      setManualOrder]      = useState<string[]>([])
@@ -204,6 +205,31 @@ export default function CalendarPage() {
       alert('실내 저장 실패: ' + error.message)
       return
     }
+    fetchSchedules()
+  }
+
+  function handleAddFormToggle(mode: 'onetime' | 'interior') {
+    if (showAddForm && addMode === mode) {
+      setShowAddForm(false)
+    } else {
+      setShowAddForm(true)
+      setAddMode(mode)
+      setAddVehicleSearch('')
+    }
+  }
+
+  async function addInteriorSchedule(vehicleId: string) {
+    if (!selectedDate) return
+    await db().from('schedules').insert({
+      vehicle_id:     vehicleId,
+      scheduled_date: selectedDate,
+      schedule_type:  'interior_only',
+      has_interior:   true,
+      is_overcount:   false,
+      is_deleted:     false,
+    })
+    setShowAddForm(false)
+    setAddVehicleSearch('')
     fetchSchedules()
   }
 
@@ -383,9 +409,9 @@ export default function CalendarPage() {
               const isToday      = dateKey === todayKey
               const isSelected   = dateKey === selectedDate
               const isHighlight  = searchQuery.trim() && searchHighlights.has(dateKey)
-              const isOvercount  = daySchedules.some(s => s.is_overcount)
-              const hasInterior  = daySchedules.some(s => s.has_interior)
-              const dow          = new Date(year, month, day).getDay()
+              const isOvercount    = daySchedules.some(s => s.is_overcount)
+              const interiorCount = daySchedules.filter(s => s.has_interior).length
+              const dow           = new Date(year, month, day).getDay()
 
               return (
                 <button
@@ -423,9 +449,11 @@ export default function CalendarPage() {
                     </span>
                   )}
 
-                  {/* 실내작업 표시 */}
-                  {hasInterior && !isSelected && (
-                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-green-400" />
+                  {/* 실내 카운트 표시 */}
+                  {interiorCount > 0 && !isSelected && (
+                    <span className="text-[9px] font-bold text-green-500 leading-none -mt-0.5">
+                      /{interiorCount}
+                    </span>
                   )}
 
                   {isOvercount && !isSelected && (
@@ -457,23 +485,38 @@ export default function CalendarPage() {
                 {month + 1}월 {parseInt(selectedDate.split('-')[2])}일 —&nbsp;
                 <span className="text-blue-600">{selectedSchedules.length}대</span>
               </h3>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={toggleReorderMode}
-                  className={`flex items-center gap-1 text-xs border px-2 py-1 rounded-lg transition-colors ${
+                  className={`flex items-center gap-0.5 text-[11px] border px-1.5 py-1 rounded-lg transition-colors whitespace-nowrap ${
                     reorderMode
                       ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'
                       : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  <GripVertical size={12} />
+                  <GripVertical size={11} />
                   {reorderMode ? '완료' : '순서 변경'}
                 </button>
                 <button
-                  onClick={() => setShowAddForm(v => !v)}
-                  className="flex items-center gap-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
+                  onClick={() => handleAddFormToggle('interior')}
+                  className={`flex items-center gap-0.5 text-[11px] border px-1.5 py-1 rounded-lg transition-colors whitespace-nowrap ${
+                    showAddForm && addMode === 'interior'
+                      ? 'bg-green-600 text-white border-green-600'
+                      : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                  }`}
                 >
-                  <Plus size={12} />
+                  <Plus size={11} />
+                  실내추가
+                </button>
+                <button
+                  onClick={() => handleAddFormToggle('onetime')}
+                  className={`flex items-center gap-0.5 text-[11px] border px-1.5 py-1 rounded-lg transition-colors whitespace-nowrap ${
+                    showAddForm && addMode === 'onetime'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
+                  }`}
+                >
+                  <Plus size={11} />
                   일세차 추가
                 </button>
                 <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600">
@@ -482,16 +525,27 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* 일세차 추가 폼 */}
+            {/* 차량 추가 폼 (일세차 / 실내추가 공용) */}
             {showAddForm && (
-              <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+              <div className={`px-4 py-3 border-b ${
+                addMode === 'interior'
+                  ? 'bg-green-50 border-green-100'
+                  : 'bg-blue-50 border-blue-100'
+              }`}>
+                <p className={`text-xs font-semibold mb-2 ${addMode === 'interior' ? 'text-green-700' : 'text-blue-700'}`}>
+                  {addMode === 'interior' ? '🛋️ 실내추가 — 차량 선택' : '일세차 추가 — 차량 선택'}
+                </p>
                 <input
                   autoFocus
                   type="text"
                   value={addVehicleSearch}
                   onChange={e => setAddVehicleSearch(e.target.value)}
                   placeholder="차량명, 번호판, 동호수, 고객명 검색"
-                  className="w-full text-sm border border-blue-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white mb-2"
+                  className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 bg-white mb-2 ${
+                    addMode === 'interior'
+                      ? 'border-green-300 focus:ring-green-400'
+                      : 'border-blue-300 focus:ring-blue-400'
+                  }`}
                 />
                 {filteredAddVehicles.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-2">검색 결과 없음</p>
@@ -500,13 +554,17 @@ export default function CalendarPage() {
                     {filteredAddVehicles.map(v => (
                       <button
                         key={v.id}
-                        onClick={() => addOnetimeSchedule(v.id)}
-                        className="w-full text-left flex items-center gap-2 bg-white hover:bg-blue-100 border border-blue-100 rounded-lg px-3 py-2 text-sm transition-colors"
+                        onClick={() => addMode === 'interior' ? addInteriorSchedule(v.id) : addOnetimeSchedule(v.id)}
+                        className={`w-full text-left flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-sm transition-colors border ${
+                          addMode === 'interior'
+                            ? 'hover:bg-green-100 border-green-100'
+                            : 'hover:bg-blue-100 border-blue-100'
+                        }`}
                       >
                         <span className="font-medium text-gray-900">{v.car_name}</span>
                         <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
                         {v.customer?.apartment && (
-                          <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
+                          <span className={`text-xs flex items-center gap-0.5 ml-auto ${addMode === 'interior' ? 'text-green-600' : 'text-blue-500'}`}>
                             <Home size={10} />
                             {v.customer.apartment}
                             {v.customer?.unit_number && ` · ${v.customer.unit_number}`}
@@ -686,6 +744,12 @@ function ScheduleRow({
             <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
               {v?.plate_number}
             </span>
+            {(schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only' && (
+              <span className="flex items-center gap-0.5 text-xs bg-green-600 text-white px-1.5 py-0.5 rounded font-semibold">
+                <Sofa size={10} />
+                실내만
+              </span>
+            )}
             {schedule.is_overcount && (
               <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
                 <AlertTriangle size={10} />
