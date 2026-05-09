@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     // ⚠️ completed_by가 NULL인 비정상 기록은 제외
     const { data: washRecords, error: washError } = await supabase
       .from('wash_records')
-      .select('id, completed_by, worker_id, service_type, wash_date, vehicle_id, created_at')
+      .select('id, completed_by, worker_id, service_type, wash_date, vehicle_id, schedule_id, created_at')
       .gte('wash_date', startDate)
       .lte('wash_date', endDate)
       .not('completed_by', 'is', null)  // completed_by가 NULL인 비정상 기록 제외
@@ -93,7 +93,11 @@ export async function POST(request: NextRequest) {
     )
     
     sorted.forEach((record: any) => {
-      const key = `${record.wash_date}|${record.vehicle_id}|${record.completed_by}`
+      // schedule_id가 있으면 (스케줄별 독립 기록) schedule_id+worker로 중복 제거
+      // 없으면 날짜+차량+worker+service_type으로 중복 제거 (실외/실내만이 같은 차량에 공존 가능)
+      const key = record.schedule_id
+        ? `sched:${record.schedule_id}|${record.completed_by}`
+        : `${record.wash_date}|${record.vehicle_id}|${record.completed_by}|${record.service_type ?? ''}`
       if (!seen.has(key)) {
         seen.add(key)
         uniqueRecords.push(record)
@@ -111,12 +115,16 @@ export async function POST(request: NextRequest) {
           workerCount[record.completed_by] = { total: 0, outdoor: 0, indoor: 0, worker_id: record.worker_id }
         }
         
-        // 세차 1건 = 실외 1건 (항상)
         workerCount[record.completed_by].total += 1
-        workerCount[record.completed_by].outdoor += 1
-        // 실내청소가 포함된 경우 실내도 추가
-        if (record.service_type && record.service_type.includes('interior')) {
+        if (record.service_type === 'interior_only') {
+          // 실내 전용: 실내만 카운트 (실외 세차 없음)
           workerCount[record.completed_by].indoor += 1
+        } else {
+          // regular, interior: 실외 포함
+          workerCount[record.completed_by].outdoor += 1
+          if (record.service_type === 'interior') {
+            workerCount[record.completed_by].indoor += 1
+          }
         }
       }
     })

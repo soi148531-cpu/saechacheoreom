@@ -19,6 +19,7 @@ interface CompletionModalProps {
   }
   scheduled_date: string
   schedule_id: string
+  isInteriorOnly?: boolean
   onSuccess?: () => void
 }
 
@@ -37,6 +38,7 @@ export default function CompletionModal({
   customer,
   scheduled_date,
   schedule_id,
+  isInteriorOnly = false,
   onSuccess,
 }: CompletionModalProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -54,7 +56,7 @@ export default function CompletionModal({
   useEffect(() => {
     if (!isOpen) return
     setError('')
-    setWorkType('exterior')
+    setWorkType(isInteriorOnly ? 'interior_only' : 'exterior')
     setInteriorOnlyPrice(20000)
     setCustomLabel('실내청소')
     const fetchWorkers = async () => {
@@ -192,8 +194,14 @@ export default function CompletionModal({
 
           {/* 작업 유형 */}
           <div className="border-t border-gray-100 pt-3">
+            {isInteriorOnly && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-3">
+                <span className="text-green-700 text-sm font-semibold">🛋️ 실내 전용 작업</span>
+                <span className="text-xs text-green-600">외부 세차 없음</span>
+              </div>
+            )}
             <label className="block text-xs font-bold text-gray-700 mb-2">작업 유형</label>
-            <div className="space-y-2">
+            <div className={`space-y-2 ${isInteriorOnly ? 'opacity-50 pointer-events-none' : ''}`}>
               <label className="flex items-center cursor-pointer">
                 <input
                   type="radio"

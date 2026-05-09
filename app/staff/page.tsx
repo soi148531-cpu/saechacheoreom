@@ -92,7 +92,7 @@ export default function StaffPage() {
       ? '*, vehicle:vehicles(*, customer:customers(name, apartment, unit_number)), admin_memo'
       : '*, vehicle:vehicles(*, customer:customers(name, apartment, unit_number))'
 
-    const washCols = ['id', 'vehicle_id', 'memo']
+    const washCols = ['id', 'vehicle_id', 'schedule_id', 'memo']
     if (support.washAdminNote) washCols.push('admin_note')
     if (support.washCompletedBy) washCols.push('completed_by')
 
@@ -136,10 +136,12 @@ export default function StaffPage() {
     setMonthlySchedules((mSched ?? []) as { vehicle_id: string; scheduled_date: string }[])
     setMonthlyWashDates((mWash ?? []) as { vehicle_id: string; wash_date: string }[])
 
-    const recordRows = (records ?? []) as Array<{ id: string; vehicle_id: string; memo: string | null; admin_note: string | null; completed_by: string | null }>
+    const recordRows = (records ?? []) as Array<{ id: string; vehicle_id: string; schedule_id: string | null; memo: string | null; admin_note: string | null; completed_by: string | null }>
 
     const items: TaskItem[] = rows.map(s => {
-      const record = recordRows.find(r => r.vehicle_id === s.vehicle_id)
+      // schedule_id로 정확히 매칭 (같은 차량의 실외/실내만 스케줄을 독립적으로 처리)
+      const record = recordRows.find(r => r.schedule_id === s.id)
+        ?? recordRows.find(r => !r.schedule_id && r.vehicle_id === s.vehicle_id)
       const basePrice = (s.vehicle as ScheduleRow['vehicle']).unit_price ?? 0
       const prevInteriorDone = record
         ? ((record as unknown as { price?: number }).price ?? 0) - basePrice > 0
@@ -251,15 +253,18 @@ export default function StaffPage() {
     const d = new Date(date + 'T00:00:00')
     const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량`
     const lines: string[] = [header]
-    let interiorCount = 0
+    let interiorAddCount = 0
+
     const workerTasks = tasks.filter(t => !t.selfWork && !t.skipped)
+    const regularTasks    = workerTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type !== 'interior_only')
+    const interiorOnlyTasks = workerTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only')
 
     // 아파트 이름에서 동/숫자 제거 (예: "서한이다음 621동" → "서한이다음")
     const baseApt = (apt: string) => apt.replace(/\s*\d+동?\s*$/, '').trim() || apt
 
-    // 아파트 기본명으로 그룹핑
-    const grouped: { apt: string; items: typeof workerTasks }[] = []
-    workerTasks.forEach(t => {
+    // 일반 외부세차 — 아파트 기본명으로 그룹핑
+    const grouped: { apt: string; items: typeof regularTasks }[] = []
+    regularTasks.forEach(t => {
       const apt = baseApt(t.schedule.vehicle.customer?.apartment ?? '기타')
       const group = grouped.find(g => g.apt === apt)
       if (group) group.items.push(t)
@@ -274,17 +279,29 @@ export default function StaffPage() {
         lines.push(`${v.car_name} - ${v.plate_number}`)
         if (t.schedule.has_interior) {
           lines.push('내부')
-          interiorCount++
+          interiorAddCount++
         }
       })
     })
 
-    const outdoor = workerTasks.length
-    const total = outdoor + interiorCount
+    // 실내만 작업 — 별도 섹션
+    if (interiorOnlyTasks.length > 0) {
+      lines.push('')
+      lines.push('[실내작업]')
+      interiorOnlyTasks.forEach(t => {
+        const v = t.schedule.vehicle
+        const unit = v.customer?.unit_number ? ` (${v.customer.unit_number})` : ''
+        lines.push(`${v.car_name} - ${v.plate_number}${unit}`)
+      })
+    }
+
+    const outdoor = regularTasks.length
+    const total = outdoor + interiorAddCount + interiorOnlyTasks.length
     lines.push('')
     lines.push(`${total}대`)
     lines.push(`실외${outdoor}`)
-    lines.push(`실내${interiorCount}`)
+    if (interiorAddCount > 0) lines.push(`실내${interiorAddCount}`)
+    if (interiorOnlyTasks.length > 0) lines.push(`실내만${interiorOnlyTasks.length}`)
     return lines.join('\n')
   }, [date, tasks])
 
@@ -456,6 +473,7 @@ export default function StaffPage() {
           customer={tasks[selectedTaskIdx].schedule.vehicle.customer}
           scheduled_date={tasks[selectedTaskIdx].schedule.scheduled_date}
           schedule_id={tasks[selectedTaskIdx].schedule.id}
+          isInteriorOnly={(tasks[selectedTaskIdx].schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only'}
           onSuccess={() => {
             setCompletionModalOpen(false)
             setSelectedTaskIdx(null)
