@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     
     let query = supabase
       .from('workers')
-      .select('id, name, phone, status', { count: 'exact' })
+      .select('id, name, phone, status, outdoor_rate, indoor_rate', { count: 'exact' })
       .order('name', { ascending: true })
 
     if (!includeInactive) {
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, phone, status = 'active' } = body
+    const { name, phone, status = 'active', outdoor_rate, indoor_rate } = body
 
     if (!name) {
       return NextResponse.json(
@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         phone: phone?.trim() || null,
         status,
+        outdoor_rate: typeof outdoor_rate === 'number' && outdoor_rate >= 0 ? outdoor_rate : 10000,
+        indoor_rate: typeof indoor_rate === 'number' && indoor_rate >= 0 ? indoor_rate : 10000,
       })
       .select()
       .single()

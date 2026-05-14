@@ -129,16 +129,21 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // 2-2. workers 테이블에서 워커 정보 조회 (이름 -> UUID 매핑)
+    // 2-2. workers 테이블에서 워커 정보 조회 (이름 -> UUID 매핑 + 개인 단가)
     const { data: workers, error: workersError } = await supabase
       .from('workers')
-      .select('id, name')
+      .select('id, name, outdoor_rate, indoor_rate')
 
     if (workersError) throw workersError
 
-    const workerMap: Record<string, string> = {}
+    // 개인 단가가 있으면 사용, 없거나 0이면 글로벌 단가(rates)로 폴백
+    const workerMap: Record<string, { id: string; outdoor: number; indoor: number }> = {}
     workers?.forEach((w: any) => {
-      workerMap[w.name] = w.id
+      workerMap[w.name] = {
+        id: w.id,
+        outdoor: (typeof w.outdoor_rate === 'number' && w.outdoor_rate > 0) ? w.outdoor_rate : rates.outdoor,
+        indoor: (typeof w.indoor_rate === 'number' && w.indoor_rate > 0) ? w.indoor_rate : rates.indoor,
+      }
     })
 
     // 3. 기존 정산 레코드 확인
@@ -153,15 +158,19 @@ export async function POST(request: NextRequest) {
     const payrollsToCreate: any[] = []
     
     Object.entries(workerCount).forEach(([workerName, counts]) => {
-      const workerId = workerMap[workerName]
-      if (workerId) {
-        // 계산: (실외 × 외부료금) + (실내 × 내부료금)
-        const outdoorAmount = counts.outdoor * rates.outdoor
-        const indoorAmount = counts.indoor * rates.indoor
+      const workerInfo = workerMap[workerName]
+      if (workerInfo) {
+        // 개인 단가 사용 (없으면 글로벌 단가로 이미 폴백됨)
+        const workerOutdoor = workerInfo.outdoor
+        const workerIndoor = workerInfo.indoor
+
+        // 계산: (실외 × 개인외부료금) + (실내 × 개인내부료금)
+        const outdoorAmount = counts.outdoor * workerOutdoor
+        const indoorAmount = counts.indoor * workerIndoor
         const baseAmount = outdoorAmount + indoorAmount
-        
+
         payrollsToCreate.push({
-          worker_id: workerId,
+          worker_id: workerInfo.id,
           year_month,
           total_washes: counts.total,  // 실제 세차 차량 대수 (실내/실외 중복 아님)
           total_amount: baseAmount,  // 기본 정산액 (실외 + 실내)
@@ -169,7 +178,7 @@ export async function POST(request: NextRequest) {
           paid_amount: baseAmount,  // 지급 예정액
           paid_at: null,
           created_at: getNowKSTTimestamp(),  // ✓ KST 기준 타임스탬프
-          memo: `(실외 ${counts.outdoor}건 × ₩${rates.outdoor.toLocaleString()} + 실내 ${counts.indoor}건 × ₩${rates.indoor.toLocaleString()})`
+          memo: `(실외 ${counts.outdoor}건 × ₩${workerOutdoor.toLocaleString()} + 실내 ${counts.indoor}건 × ₩${workerIndoor.toLocaleString()})`
         })
       }
     })

@@ -14,6 +14,8 @@ interface WorkerItem {
   name: string
   phone: string | null
   status: string
+  outdoor_rate?: number
+  indoor_rate?: number
 }
 
 const MONTHLY_TABS: { key: string; label: string }[] = [
@@ -349,8 +351,12 @@ function WorkerManagement() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
+  const [editOutdoorRate, setEditOutdoorRate] = useState<number>(10000)
+  const [editIndoorRate, setEditIndoorRate] = useState<number>(10000)
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
+  const [newOutdoorRate, setNewOutdoorRate] = useState<number>(10000)
+  const [newIndoorRate, setNewIndoorRate] = useState<number>(10000)
   const [showAddForm, setShowAddForm] = useState(false)
 
   const applySavedOrder = (list: WorkerItem[]) => {
@@ -408,10 +414,10 @@ function WorkerManagement() {
       const res = await fetch('/api/workers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), phone: newPhone.trim() || null, status: 'active' }),
+        body: JSON.stringify({ name: newName.trim(), phone: newPhone.trim() || null, status: 'active', outdoor_rate: newOutdoorRate, indoor_rate: newIndoorRate }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || '추가 실패') }
-      setNewName(''); setNewPhone(''); setShowAddForm(false)
+      setNewName(''); setNewPhone(''); setNewOutdoorRate(10000); setNewIndoorRate(10000); setShowAddForm(false)
       await loadWorkers()
     } catch (err) {
       setError(err instanceof Error ? err.message : '추가 중 오류')
@@ -427,7 +433,7 @@ function WorkerManagement() {
       const res = await fetch(`/api/workers/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName.trim(), phone: editPhone.trim() || null }),
+        body: JSON.stringify({ name: editName.trim(), phone: editPhone.trim() || null, outdoor_rate: editOutdoorRate, indoor_rate: editIndoorRate }),
       })
       if (!res.ok) throw new Error('수정 실패')
       setEditingId(null)
@@ -488,6 +494,30 @@ function WorkerManagement() {
             onChange={e => setNewPhone(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">실외세차 단가 (원/건)</label>
+              <input
+                type="number"
+                value={newOutdoorRate}
+                onChange={e => setNewOutdoorRate(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                step={1000}
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">실내청소 단가 (원/건)</label>
+              <input
+                type="number"
+                value={newIndoorRate}
+                onChange={e => setNewIndoorRate(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                step={1000}
+                min={0}
+              />
+            </div>
+          </div>
           <div className="flex gap-2">
             <button onClick={handleAdd} disabled={loading}
               className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
@@ -510,9 +540,35 @@ function WorkerManagement() {
               {editingId === worker.id ? (
                 <div className="space-y-2">
                   <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                    placeholder="이름"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                   <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                    placeholder="연락처"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">실외세차 단가 (원/건)</label>
+                      <input
+                        type="number"
+                        value={editOutdoorRate}
+                        onChange={e => setEditOutdoorRate(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        step={1000}
+                        min={0}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">실내청소 단가 (원/건)</label>
+                      <input
+                        type="number"
+                        value={editIndoorRate}
+                        onChange={e => setEditIndoorRate(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        step={1000}
+                        min={0}
+                      />
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdate(worker.id)} disabled={loading}
                       className="flex-1 flex items-center justify-center gap-1 bg-green-600 text-white py-2 rounded-lg text-sm">
@@ -550,11 +606,14 @@ function WorkerManagement() {
                         {worker.status === 'active' ? '활성' : '비활성'}
                       </span>
                     </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      실외 {(worker.outdoor_rate ?? 10000).toLocaleString()}원 · 실내 {(worker.indoor_rate ?? 10000).toLocaleString()}원
+                    </p>
                   </div>
 
                   {/* 수정/삭제 */}
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => { setEditingId(worker.id); setEditName(worker.name); setEditPhone(worker.phone || '') }}
+                    <button onClick={() => { setEditingId(worker.id); setEditName(worker.name); setEditPhone(worker.phone || ''); setEditOutdoorRate(worker.outdoor_rate ?? 10000); setEditIndoorRate(worker.indoor_rate ?? 10000) }}
                       className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
                       <Edit2 size={16} />
                     </button>

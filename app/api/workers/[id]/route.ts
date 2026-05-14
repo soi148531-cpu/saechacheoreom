@@ -13,19 +13,21 @@ export async function PUT(
 ) {
   try {
     const body = await request.json()
-    const { name, phone, status } = body
+    const { name, phone, status, outdoor_rate, indoor_rate } = body
 
-    if (!name && !phone && !status) {
+    if (!name && !phone && !status && outdoor_rate === undefined && indoor_rate === undefined) {
       return NextResponse.json(
         { success: false, message: '수정할 정보가 없습니다' },
         { status: 400 }
       )
     }
 
-    const updateData: Record<string, string | null> = {}
+    const updateData: Record<string, string | number | null> = {}
     if (name) updateData.name = name
     if (phone !== undefined) updateData.phone = phone
     if (status) updateData.status = status
+    if (typeof outdoor_rate === 'number' && outdoor_rate >= 0) updateData.outdoor_rate = outdoor_rate
+    if (typeof indoor_rate === 'number' && indoor_rate >= 0) updateData.indoor_rate = indoor_rate
 
     const { data, error } = await supabase
       .from('workers')
