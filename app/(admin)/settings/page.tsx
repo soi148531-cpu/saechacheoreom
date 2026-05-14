@@ -1,13 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, AlertCircle } from 'lucide-react'
+import { Save, AlertCircle, ChevronUp, ChevronDown, Plus, X, Edit2, Check, Trash2 } from 'lucide-react'
 import { usePricing, PriceTable } from '@/lib/hooks/usePricing'
 import { MessageSettingsPanel } from '@/components/MessageSettingsPanel'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
 import type { CarGrade } from '@/types'
 
-type SettingTab = 'price' | 'worker' | 'message'
+type SettingTab = 'price' | 'worker' | 'message' | 'staff'
+
+interface WorkerItem {
+  id: string
+  name: string
+  phone: string | null
+  status: string
+}
 
 const MONTHLY_TABS: { key: string; label: string }[] = [
   { key: 'monthly_1', label: '월1회' },
@@ -33,34 +40,29 @@ export default function SettingsPage() {
       <h1 className="text-xl font-bold text-gray-900 mb-4">설정</h1>
 
       {/* 탭 */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
-        <button
-          onClick={() => setTab('price')}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-            tab === 'price' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'
-          }`}
-        >
-          세차 가격표
-        </button>
-        <button
-          onClick={() => setTab('worker')}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-            tab === 'worker' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'
-          }`}
-        >
-          작업자 단가
-        </button>
-        <button
-          onClick={() => setTab('message')}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-            tab === 'message' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'
-          }`}
-        >
-          카톡 메시지
-        </button>
+      <div className="grid grid-cols-4 gap-1 bg-gray-100 rounded-lg p-1 mb-6">
+        {([
+          { key: 'price',   label: '가격표' },
+          { key: 'worker',  label: '작업자단가' },
+          { key: 'staff',   label: '직원관리' },
+          { key: 'message', label: '카톡메시지' },
+        ] as { key: SettingTab; label: string }[]).map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`py-2 rounded-md text-xs font-medium transition-colors ${
+              tab === key ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {tab === 'price' ? <PriceTableSettings /> : tab === 'worker' ? <WorkerRateSettings /> : <MessageSettingsPanel />}
+      {tab === 'price' ? <PriceTableSettings /> :
+       tab === 'worker' ? <WorkerRateSettings /> :
+       tab === 'staff' ? <WorkerManagement /> :
+       <MessageSettingsPanel />}
     </div>
   )
 }
@@ -334,6 +336,239 @@ function WorkerRateSettings() {
       <p className="text-xs text-gray-400 text-center">
         마지막 저장: {new Date(rates.updated_at).toLocaleString('ko-KR')}
       </p>
+    </div>
+  )
+}
+
+// ─── 직원 관리 ────────────────────────────────────────────────────────────────
+
+function WorkerManagement() {
+  const [workers, setWorkers] = useState<WorkerItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+
+  const applySavedOrder = (list: WorkerItem[]) => {
+    try {
+      const saved = localStorage.getItem('worker_sort_order')
+      if (!saved) return list
+      const order: string[] = JSON.parse(saved)
+      return [...list].sort((a, b) => {
+        const ai = order.indexOf(a.id)
+        const bi = order.indexOf(b.id)
+        if (ai === -1 && bi === -1) return 0
+        if (ai === -1) return 1
+        if (bi === -1) return -1
+        return ai - bi
+      })
+    } catch {
+      return list
+    }
+  }
+
+  const saveOrder = (list: WorkerItem[]) => {
+    localStorage.setItem('worker_sort_order', JSON.stringify(list.map(w => w.id)))
+  }
+
+  const loadWorkers = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/workers?includeInactive=true')
+      const json = await res.json()
+      const raw: WorkerItem[] = Array.isArray(json) ? json : json.data || []
+      setWorkers(applySavedOrder(raw))
+      setError('')
+    } catch {
+      setError('직원 목록 불러오기 실패')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadWorkers() }, [])
+
+  const moveWorker = (index: number, dir: -1 | 1) => {
+    const target = index + dir
+    if (target < 0 || target >= workers.length) return
+    const next = [...workers]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setWorkers(next)
+    saveOrder(next)
+  }
+
+  const handleAdd = async () => {
+    if (!newName.trim()) { setError('이름을 입력하세요'); return }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), phone: newPhone.trim() || null, status: 'active' }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || '추가 실패') }
+      setNewName(''); setNewPhone(''); setShowAddForm(false)
+      await loadWorkers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '추가 중 오류')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpdate = async (id: string) => {
+    if (!editName.trim()) { setError('이름을 입력하세요'); return }
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/workers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editName.trim(), phone: editPhone.trim() || null }),
+      })
+      if (!res.ok) throw new Error('수정 실패')
+      setEditingId(null)
+      await loadWorkers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '수정 중 오류')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/workers/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('삭제 실패')
+      await loadWorkers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '삭제 중 오류')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="p-3 bg-red-100 text-red-700 rounded-lg text-sm flex items-center gap-2">
+          <AlertCircle size={16} />{error}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">순서를 바꾸면 당번 선택 목록에도 반영됩니다</p>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700"
+        >
+          <Plus size={16} /> 직원 추가
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3">
+          <p className="text-sm font-semibold text-gray-800">새 직원 등록</p>
+          <input
+            type="text"
+            placeholder="이름"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <input
+            type="tel"
+            placeholder="연락처 (선택)"
+            value={newPhone}
+            onChange={e => setNewPhone(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <div className="flex gap-2">
+            <button onClick={handleAdd} disabled={loading}
+              className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+              등록
+            </button>
+            <button onClick={() => setShowAddForm(false)}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-300">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading && workers.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 text-sm">로딩 중...</div>
+      ) : (
+        <div className="space-y-2">
+          {workers.map((worker, index) => (
+            <div key={worker.id} className="bg-white border border-gray-200 rounded-xl p-3">
+              {editingId === worker.id ? (
+                <div className="space-y-2">
+                  <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleUpdate(worker.id)} disabled={loading}
+                      className="flex-1 flex items-center justify-center gap-1 bg-green-600 text-white py-2 rounded-lg text-sm">
+                      <Check size={15} /> 저장
+                    </button>
+                    <button onClick={() => setEditingId(null)}
+                      className="flex-1 flex items-center justify-center gap-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm">
+                      <X size={15} /> 취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {/* 순서 조절 */}
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button onClick={() => moveWorker(index, -1)} disabled={index === 0}
+                      className="p-0.5 text-gray-400 hover:text-blue-600 disabled:opacity-20">
+                      <ChevronUp size={18} />
+                    </button>
+                    <button onClick={() => moveWorker(index, 1)} disabled={index === workers.length - 1}
+                      className="p-0.5 text-gray-400 hover:text-blue-600 disabled:opacity-20">
+                      <ChevronDown size={18} />
+                    </button>
+                  </div>
+
+                  {/* 순서 번호 */}
+                  <span className="text-xs font-bold text-gray-400 w-4 text-center">{index + 1}</span>
+
+                  {/* 이름/연락처 */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm">{worker.name}</p>
+                    {worker.phone && <p className="text-xs text-gray-500">{worker.phone}</p>}
+                    <p className="text-xs mt-0.5">
+                      <span className={worker.status === 'active' ? 'text-green-600' : 'text-gray-400'}>
+                        {worker.status === 'active' ? '활성' : '비활성'}
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* 수정/삭제 */}
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => { setEditingId(worker.id); setEditName(worker.name); setEditPhone(worker.phone || '') }}
+                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
+                      <Edit2 size={16} />
+                    </button>
+                    <button onClick={() => handleDelete(worker.id)}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

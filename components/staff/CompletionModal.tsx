@@ -66,6 +66,20 @@ export default function CompletionModal({
         const json = await res.json()
         let data = (json.data || json) as Worker[]
         data = Array.from(new Map(data.map(w => [w.id, w])).values())
+        // 설정에서 저장한 순서 적용
+        try {
+          const saved = localStorage.getItem('worker_sort_order')
+          if (saved) {
+            const order: string[] = JSON.parse(saved)
+            data = [...data].sort((a, b) => {
+              const ai = order.indexOf(a.id), bi = order.indexOf(b.id)
+              if (ai === -1 && bi === -1) return 0
+              if (ai === -1) return 1
+              if (bi === -1) return -1
+              return ai - bi
+            })
+          }
+        } catch { /* ignore */ }
         setWorkers(data)
         if (data.length > 0) {
           setSelectedWorkerId(data[0].id)
