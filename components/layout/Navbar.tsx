@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Users, Receipt, CheckSquare, BarChart2, Settings } from 'lucide-react'
+import { CalendarDays, Users, Receipt, CheckSquare, BarChart2, Settings, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { href: '/customers', label: '고객관리', icon: Users },
   { href: '/billing',   label: '청구발송', icon: Receipt },
   { href: '/payroll',   label: '급여정산', icon: Receipt },
+  { href: '/history',   label: '이력조회', icon: History },
   { href: '/stats',     label: '통계',     icon: BarChart2 },
   { href: '/settings',  label: '설정',     icon: Settings },
 ]
@@ -35,7 +36,7 @@ export default function Navbar() {
 
       {/* 하단 네비게이션 (모바일) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 md:hidden">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
             return (
