@@ -1,11 +1,8 @@
 'use client'
 
-// Design Ref: §5.2 — 고객 관리 목록 (정기/정지/비정기/미등록 탭)
-// Plan SC: SC-01 오시오 기능 대체
-
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { Plus, Search, ChevronRight } from 'lucide-react'
+import { Plus, Search, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
 import { formatPrice } from '@/lib/utils'
@@ -19,6 +16,27 @@ const TABS: { key: VehicleStatus | 'all'; label: string }[] = [
   { key: 'unregistered', label: '미등록' },
 ]
 
+const MONTHLY_COUNT_NUM: Record<string, number> = {
+  monthly_1: 1,
+  monthly_2: 2,
+  monthly_4: 4,
+}
+
+function toYM(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function formatYM(ym: string) {
+  const [y, m] = ym.split('-')
+  return `${y}년 ${Number(m)}월`
+}
+
+function formatDay(dateStr: string | null | undefined) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading]     = useState(true)
@@ -26,26 +44,26 @@ export default function CustomersPage() {
   const [search, setSearch]       = useState('')
   const supabase = createClient()
 
+  const todayYM = toYM(new Date())
+  const [viewMonth, setViewMonth]   = useState(todayYM)
+  const [showNewList, setShowNewList]   = useState(false)
+  const [showExitList, setShowExitList] = useState(false)
+
   const fetchCustomers = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('customers')
       .select(`*, vehicles(*)`)
       .order('created_at', { ascending: false })
-
     if (!error && data) setCustomers(data as Customer[])
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => {
-    fetchCustomers()
-  }, [fetchCustomers])
+  useEffect(() => { fetchCustomers() }, [fetchCustomers])
 
   // 탭 + 검색 필터
   const filtered = customers.filter(c => {
     const vehicles = c.vehicles ?? []
-
-    // 검색어 필터
     const q = search.toLowerCase()
     if (q) {
       const match =
@@ -58,14 +76,11 @@ export default function CustomersPage() {
         )
       if (!match) return false
     }
-
-    // 탭 필터
     if (activeTab === 'all') return true
     if (activeTab === 'unregistered') return vehicles.length === 0 || vehicles.some(v => v.status === 'unregistered')
     return vehicles.some(v => v.status === activeTab)
   })
 
-  // 탭별 카운트 (active/paused/irregular는 차량 기준)
   const allVehicles = customers.flatMap(c => c.vehicles ?? [])
   const counts = {
     all:          customers.length,
@@ -75,49 +90,151 @@ export default function CustomersPage() {
     unregistered: customers.filter(c => !c.vehicles || c.vehicles.length === 0 || c.vehicles.some(v => v.status === 'unregistered')).length,
   }
 
-  // 이번달 신규/이탈 카운트
-  const thisMonth = (() => {
-    const n = new Date()
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
-  })()
-  const newThisMonth  = allVehicles.filter(v => v.start_date?.startsWith(thisMonth)).length
-  const exitThisMonth = allVehicles.filter(v => v.end_date?.startsWith(thisMonth)).length
+  // 월별 신규/이탈
+  const vehicleWithCustomer = (vId: string) =>
+    customers.find(c => c.vehicles?.some(v => v.id === vId))
+
+  const newVehicles  = allVehicles.filter(v => v.start_date?.startsWith(viewMonth))
+  const exitVehicles = allVehicles.filter(v => v.end_date?.startsWith(viewMonth))
+
+  // 월 이동
+  const [vy, vm] = viewMonth.split('-').map(Number)
+  const goPrev = () => {
+    const d = new Date(vy, vm - 2, 1)
+    setViewMonth(toYM(d))
+    setShowNewList(false); setShowExitList(false)
+  }
+  const goNext = () => {
+    if (viewMonth >= todayYM) return
+    const d = new Date(vy, vm, 1)
+    setViewMonth(toYM(d))
+    setShowNewList(false); setShowExitList(false)
+  }
+
+  // 월 예상 매출 (정기 active 차량)
+  const monthlyRevenue = allVehicles
+    .filter(v => v.status === 'active')
+    .reduce((sum, v) => {
+      const count = MONTHLY_COUNT_NUM[v.monthly_count] ?? 0
+      return sum + (v.unit_price ?? 0) * count
+    }, 0)
 
   return (
     <div className="p-4 max-w-2xl mx-auto">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-xl font-bold text-gray-900">고객 관리</h1>
-        <div className="flex gap-2">
         <Link
-            href="/customers/new"
-            className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          href="/customers/new"
+          className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={16} />
+          고객 등록
+        </Link>
+      </div>
+
+      {/* 월별 변동 현황 */}
+      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-3">
+        {/* 월 네비게이션 */}
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={goPrev}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500"
           >
-            <Plus size={16} />
-            고객 등록
-          </Link>
+            <ChevronLeft size={18} />
+          </button>
+          <span className="text-sm font-bold text-gray-700">{formatYM(viewMonth)} 변동 현황</span>
+          <button
+            onClick={goNext}
+            disabled={viewMonth >= todayYM}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500 disabled:opacity-30"
+          >
+            <ChevronRight size={18} />
+          </button>
         </div>
+
+        {/* 신규/이탈 버튼 */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setShowNewList(p => !p); setShowExitList(false) }}
+            className="flex-1 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-center"
+          >
+            <p className="text-xs text-blue-500 font-medium">신규 등록</p>
+            <p className="text-base font-bold text-blue-700 flex items-center justify-center gap-1">
+              {newVehicles.length}대
+              {showNewList ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </p>
+          </button>
+          <button
+            onClick={() => { setShowExitList(p => !p); setShowNewList(false) }}
+            className="flex-1 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-center"
+          >
+            <p className="text-xs text-red-400 font-medium">이탈(정지)</p>
+            <p className="text-base font-bold text-red-600 flex items-center justify-center gap-1">
+              {exitVehicles.length}대
+              {showExitList ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </p>
+          </button>
+        </div>
+
+        {/* 신규 목록 */}
+        {showNewList && (
+          <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
+            {newVehicles.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-1">신규 등록 차량 없음</p>
+            ) : newVehicles.map(v => {
+              const c = vehicleWithCustomer(v.id)
+              return (
+                <div key={v.id} className="flex items-center justify-between text-xs text-gray-700 bg-blue-50 rounded px-2 py-1">
+                  <span>
+                    <span className="font-semibold">{c?.name}</span>
+                    <span className="text-gray-400 ml-1">{c?.apartment}</span>
+                    <span className="ml-1 font-mono text-gray-500">{v.plate_number}</span>
+                    <span className="ml-1">{v.car_name}</span>
+                  </span>
+                  <span className="text-blue-500 font-medium ml-2 whitespace-nowrap">{formatDay(v.start_date)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* 이탈 목록 */}
+        {showExitList && (
+          <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
+            {exitVehicles.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-1">이탈 차량 없음</p>
+            ) : exitVehicles.map(v => {
+              const c = vehicleWithCustomer(v.id)
+              return (
+                <div key={v.id} className="flex items-center justify-between text-xs text-gray-700 bg-red-50 rounded px-2 py-1">
+                  <span>
+                    <span className="font-semibold">{c?.name}</span>
+                    <span className="text-gray-400 ml-1">{c?.apartment}</span>
+                    <span className="ml-1 font-mono text-gray-500">{v.plate_number}</span>
+                    <span className="ml-1">{v.car_name}</span>
+                  </span>
+                  <span className="text-red-500 font-medium ml-2 whitespace-nowrap">{formatDay(v.end_date)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* 이번달 신규/이탈 */}
-      <div className="flex gap-3 mb-4">
-        <div className="flex-1 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-center">
-          <p className="text-xs text-blue-500 font-medium">이번달 신규</p>
-          <p className="text-lg font-bold text-blue-700">{newThisMonth}대</p>
+      {/* 요약 + 월 예상 매출 */}
+      <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 mb-3">
+        <div className="flex gap-3 text-sm">
+          <span className="text-gray-500">고객 <span className="font-bold text-gray-800">{customers.length}명</span></span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-500">정기 <span className="font-bold text-blue-600">{counts.active}대</span></span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-500">정지 <span className="font-bold text-gray-600">{counts.paused}대</span></span>
         </div>
-        <div className="flex-1 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-center">
-          <p className="text-xs text-red-400 font-medium">이번달 이탈</p>
-          <p className="text-lg font-bold text-red-600">{exitThisMonth}대</p>
+        <div className="text-right">
+          <p className="text-xs text-gray-400">월 예상 매출</p>
+          <p className="text-sm font-bold text-green-600">{formatPrice(monthlyRevenue)}원</p>
         </div>
-      </div>
-
-      {/* 요약 */}
-      <div className="flex gap-3 mb-3 text-sm">
-        <span className="text-gray-500">고객 <span className="font-bold text-gray-800">{customers.length}명</span></span>
-        <span className="text-gray-300">|</span>
-        <span className="text-gray-500">정기차량 <span className="font-bold text-blue-600">{allVehicles.filter(v => v.status === 'active').length}대</span></span>
-        <span className="text-gray-300">|</span>
-        <span className="text-gray-500">정지 <span className="font-bold text-gray-600">{allVehicles.filter(v => v.status === 'paused').length}대</span></span>
       </div>
 
       {/* 탭 */}
