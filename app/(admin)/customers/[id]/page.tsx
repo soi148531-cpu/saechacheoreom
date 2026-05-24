@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Plus, Phone, Car, Calendar,
-  PauseCircle, PlayCircle, Trash2, Pencil, Check, X, RotateCcw
+  PauseCircle, PlayCircle, Trash2, Pencil, Check, X, RotateCcw, Ticket
 } from 'lucide-react'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS, MONTHLY_COUNT_LABELS } from '@/lib/constants/pricing'
@@ -63,6 +63,12 @@ export default function CustomerDetailPage() {
   const [pausingId,   setPausingId]   = useState<string | null>(null)
   const [pauseDate,   setPauseDate]   = useState('')
   const [pauseSaving, setPauseSaving] = useState(false)
+  // 쿠폰
+  const [coupons, setCoupons] = useState<any[]>([])
+  const [showCouponForm, setShowCouponForm] = useState(false)
+  const [couponCount, setCouponCount] = useState(3)
+  const [couponNote, setCouponNote] = useState('')
+  const [couponLoading, setCouponLoading] = useState(false)
 
   const fetchCustomer = useCallback(async () => {
     const { data } = await supabase
@@ -81,7 +87,28 @@ export default function CustomerDetailPage() {
     setLoading(false)
   }, [id, supabase])
 
-  useEffect(() => { fetchCustomer() }, [fetchCustomer])
+  const fetchCoupons = useCallback(async () => {
+    const res = await fetch(`/api/coupons?customer_id=${id}`)
+    const json = await res.json()
+    if (json.success) setCoupons(json.data)
+  }, [id])
+
+  useEffect(() => { fetchCustomer(); fetchCoupons() }, [fetchCustomer, fetchCoupons])
+
+  async function issueCoupon() {
+    if (couponCount < 1) return
+    setCouponLoading(true)
+    await fetch('/api/coupons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: id, total_issued: couponCount, note: couponNote || null }),
+    })
+    setCouponLoading(false)
+    setShowCouponForm(false)
+    setCouponCount(3)
+    setCouponNote('')
+    fetchCoupons()
+  }
 
   async function saveEdit() {
     if (!editName.trim() || !editApart.trim()) return
@@ -549,6 +576,98 @@ export default function CustomerDetailPage() {
           ))
         )}
       </div>
+
+      {/* 쿠폰 섹션 */}
+      {(() => {
+        const totalIssued = coupons.reduce((s, c) => s + c.total_issued, 0)
+        const totalUsed = coupons.reduce((s, c) => s + c.used_count, 0)
+        const remaining = totalIssued - totalUsed
+        return (
+          <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ticket size={16} className="text-purple-500" />
+                <h2 className="font-semibold text-gray-800 text-sm">실내세차 쿠폰</h2>
+                {remaining > 0 && (
+                  <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                    잔여 {remaining}장
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowCouponForm(!showCouponForm)}
+                className="flex items-center gap-1 text-xs text-purple-600 font-medium hover:text-purple-800 border border-purple-200 px-2.5 py-1 rounded-lg hover:bg-purple-50"
+              >
+                <Plus size={12} /> 발행
+              </button>
+            </div>
+
+            {showCouponForm && (
+              <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                <p className="text-xs font-semibold text-purple-800">쿠폰 발행</p>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-600 shrink-0">장수</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={couponCount}
+                    onChange={e => setCouponCount(parseInt(e.target.value) || 1)}
+                    className="w-20 border border-purple-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                  <span className="text-xs text-gray-500">장</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="메모 (예: 2대 계약 감사 쿠폰)"
+                  value={couponNote}
+                  onChange={e => setCouponNote(e.target.value)}
+                  className="w-full border border-purple-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={issueCoupon}
+                    disabled={couponLoading}
+                    className="flex-1 bg-purple-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {couponLoading ? '발행 중...' : `${couponCount}장 발행`}
+                  </button>
+                  <button
+                    onClick={() => setShowCouponForm(false)}
+                    className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-200"
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {coupons.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-2">발행된 쿠폰이 없습니다</p>
+            ) : (
+              <div className="space-y-1.5">
+                {coupons.map(c => {
+                  const rem = c.total_issued - c.used_count
+                  return (
+                    <div key={c.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2">
+                      <div>
+                        <span className="font-medium text-gray-700">실내청소 쿠폰 {c.total_issued}장</span>
+                        {c.note && <span className="text-gray-400 ml-1.5">({c.note})</span>}
+                        <span className="text-gray-400 ml-1.5">
+                          {new Date(c.issued_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} 발행
+                        </span>
+                      </div>
+                      <span className={`font-bold ${rem > 0 ? 'text-purple-600' : 'text-gray-400 line-through'}`}>
+                        {rem > 0 ? `${rem}장 남음` : '사용완료'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

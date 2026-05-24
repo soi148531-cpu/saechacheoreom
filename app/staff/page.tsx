@@ -12,7 +12,7 @@ import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleRow = Schedule & {
   admin_memo?: string | null
-  vehicle: Vehicle & { customer: { name: string; apartment: string; unit_number: string | null } }
+  vehicle: Vehicle & { customer: { id: string; name: string; apartment: string; unit_number: string | null } }
 }
 
 type SchemaSupport = {
@@ -89,8 +89,8 @@ export default function StaffPage() {
 
     const support = schemaSupport ?? await detectSchemaSupport()
     const scheduleSelect = support.scheduleAdminMemo
-      ? '*, vehicle:vehicles(*, customer:customers(name, apartment, unit_number)), admin_memo'
-      : '*, vehicle:vehicles(*, customer:customers(name, apartment, unit_number))'
+      ? '*, vehicle:vehicles(*, customer:customers(id, name, apartment, unit_number)), admin_memo'
+      : '*, vehicle:vehicles(*, customer:customers(id, name, apartment, unit_number))'
 
     const washCols = ['id', 'vehicle_id', 'schedule_id', 'memo']
     if (support.washAdminNote) washCols.push('admin_note')
@@ -470,7 +470,12 @@ export default function StaffPage() {
             plate_number: tasks[selectedTaskIdx].schedule.vehicle.plate_number,
             unit_price: tasks[selectedTaskIdx].schedule.vehicle.unit_price || 0,
           }}
-          customer={tasks[selectedTaskIdx].schedule.vehicle.customer}
+          customer={{
+            id: tasks[selectedTaskIdx].schedule.vehicle.customer.id,
+            name: tasks[selectedTaskIdx].schedule.vehicle.customer.name,
+            apartment: tasks[selectedTaskIdx].schedule.vehicle.customer.apartment,
+            unit_number: tasks[selectedTaskIdx].schedule.vehicle.customer.unit_number,
+          }}
           scheduled_date={tasks[selectedTaskIdx].schedule.scheduled_date}
           schedule_id={tasks[selectedTaskIdx].schedule.id}
           isInteriorOnly={(tasks[selectedTaskIdx].schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only'}

@@ -16,6 +16,7 @@ interface CompletionModalProps {
     name: string
     apartment: string
     unit_number: string | null
+    id?: string
   }
   scheduled_date: string
   schedule_id: string
@@ -29,7 +30,7 @@ interface Worker {
   phone: string | null
 }
 
-type WorkType = 'exterior' | 'interior_only' | 'both'
+type WorkType = 'exterior' | 'interior_only' | 'both' | 'coupon'
 
 export default function CompletionModal({
   isOpen,
@@ -50,6 +51,7 @@ export default function CompletionModal({
   const [memo, setMemo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [availableCoupons, setAvailableCoupons] = useState(0)
 
 
   // 직원 목록 불러오기 — 모달이 열릴 때 1회만 실행
@@ -89,16 +91,29 @@ export default function CompletionModal({
       }
     }
     fetchWorkers()
+    // 쿠폰 잔여 조회
+    if (customer.id) {
+      fetch(`/api/coupons?customer_id=${customer.id}`)
+        .then(r => r.json())
+        .then(json => {
+          if (json.success) {
+            const rem = (json.data || []).reduce((s: number, c: any) => s + Math.max(0, c.total_issued - c.used_count), 0)
+            setAvailableCoupons(rem)
+          }
+        })
+        .catch(() => {})
+    }
   }, [isOpen])
 
   const calculatePrice = () => {
     if (workType === 'exterior') return vehicle.unit_price || 0
     if (workType === 'both') return (vehicle.unit_price || 0) + 10000
+    if (workType === 'coupon') return vehicle.unit_price || 0  // 실내는 쿠폰으로 무료
     return interiorOnlyPrice
   }
 
   const getServiceType = () => {
-    if (workType === 'both') return 'interior'
+    if (workType === 'both' || workType === 'coupon') return 'interior'
     if (workType === 'interior_only') return 'interior_only'
     return 'regular'
   }
@@ -120,6 +135,14 @@ export default function CompletionModal({
       const finalPrice = calculatePrice()
       const wash_date = scheduled_date
 
+      if (workType === 'coupon' && customer.id) {
+        await fetch('/api/coupons/use', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customer.id }),
+        })
+      }
+
       const response = await fetch('/api/wash-records/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,6 +157,8 @@ export default function CompletionModal({
           completed_by: selectedWorkerObj.name,
           memo: workType === 'interior_only'
             ? [`[서비스:${customLabel.trim() || '맞춤작업'}]`, memo.trim()].filter(Boolean).join(' ')
+            : workType === 'coupon'
+            ? [`[쿠폰:실내]`, memo.trim()].filter(Boolean).join(' ') || null
             : memo.trim() || null,
         }),
       })
@@ -252,6 +277,20 @@ export default function CompletionModal({
                 <span className="text-sm font-semibold text-orange-700">맞춤 작업</span>
                 <span className="text-xs text-orange-500 ml-2">(가격 직접 입력 · 0원 서비스 포함)</span>
               </label>
+              {availableCoupons > 0 && (
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="work_type"
+                    value="coupon"
+                    checked={workType === 'coupon'}
+                    onChange={() => setWorkType('coupon')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm font-semibold text-purple-700">🎫 실내쿠폰 사용</span>
+                  <span className="text-xs text-purple-500 ml-2">(잔여 {availableCoupons}장 · 실내청소 무료)</span>
+                </label>
+              )}
             </div>
 
             {/* 실내 전용 가격 입력 */}
