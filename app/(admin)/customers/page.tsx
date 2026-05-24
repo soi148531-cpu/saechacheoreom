@@ -111,12 +111,14 @@ export default function CustomersPage() {
     setShowNewList(false); setShowExitList(false)
   }
 
-  // 월 예상 매출 (정기 active 차량)
+  // 월 예상 매출 (정기 active 차량 외부 + 실내)
   const monthlyRevenue = allVehicles
     .filter(v => v.status === 'active')
     .reduce((sum, v) => {
       const count = MONTHLY_COUNT_NUM[v.monthly_count] ?? 0
-      return sum + (v.unit_price ?? 0) * count
+      const exteriorRevenue = (v.unit_price ?? 0) * count
+      const interiorRevenue = (v.interior_count ?? 0) * 10000
+      return sum + exteriorRevenue + interiorRevenue
     }, 0)
 
   return (
