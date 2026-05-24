@@ -55,8 +55,9 @@ export default function CustomerDetailPage() {
   const [editVRepeatMode,  setEditVRepeatMode]  = useState<RepeatMode>('date')
   const [editVUnitPrice,   setEditVUnitPrice]   = useState('')
   const [editVCustomPrice, setEditVCustomPrice] = useState('')
-  const [editVEndDate,     setEditVEndDate]     = useState('')
-  const [editVStatus,      setEditVStatus]      = useState<VehicleStatus>('active')
+  const [editVEndDate,       setEditVEndDate]       = useState('')
+  const [editVStatus,        setEditVStatus]        = useState<VehicleStatus>('active')
+  const [editVInteriorCount, setEditVInteriorCount] = useState<number>(0)
   const [vehicleSaving,    setVehicleSaving]    = useState(false)
   const [extending,      setExtending]      = useState<string | null>(null)
   // 서비스 정지: 어떤 차량이 정지 대기 중인지, 날짜 선택 값
@@ -146,6 +147,7 @@ export default function CustomerDetailPage() {
     setEditVCustomPrice(v.custom_price?.toString() ?? '')
     setEditVEndDate(v.end_date ?? '')
     setEditVStatus(v.status)
+    setEditVInteriorCount(v.interior_count ?? 0)
   }
 
   async function saveVehicle() {
@@ -167,8 +169,9 @@ export default function CustomerDetailPage() {
       unit_price:    unitPrice,
       monthly_price: monthlyPrice,
       custom_price:  customPrice,
-      end_date:      editVEndDate || null,
-      status:        editVStatus,
+      end_date:        editVEndDate || null,
+      status:          editVStatus,
+      interior_count:  editVInteriorCount,
     }).eq('id', editingVehicleId)
     setVehicleSaving(false)
     setEditingVehicleId(null)
@@ -401,6 +404,19 @@ export default function CustomerDetailPage() {
                       <input type="number" value={editVUnitPrice} onChange={e => setEditVUnitPrice(e.target.value)} placeholder="비워두면 자동계산" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
+                      <label className="text-xs text-gray-500 block mb-1">실내청소 횟수 (월)</label>
+                      <select
+                        value={editVInteriorCount}
+                        onChange={e => setEditVInteriorCount(Number(e.target.value))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value={0}>없음</option>
+                        <option value={1}>월 1회</option>
+                        <option value={2}>월 2회</option>
+                        <option value={4}>월 4회</option>
+                      </select>
+                    </div>
+                    <div>
                       <label className="text-xs text-gray-500 block mb-1">개별 월정가 (특가 설정)</label>
                       <input type="number" value={editVCustomPrice} onChange={e => setEditVCustomPrice(e.target.value)} placeholder="비워두면 기본 가격표 사용" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" step={1000} min={0} />
                       <p className="text-xs text-orange-500 mt-0.5">※ 입력 시 기본 가격표보다 이 금액이 우선 적용됩니다</p>
@@ -496,6 +512,9 @@ export default function CustomerDetailPage() {
                     <div>
                       <span className="text-gray-400">월횟수</span>{' '}
                       <span className="font-medium">{MONTHLY_COUNT_LABELS[v.monthly_count]}</span>
+                      {v.interior_count != null && v.interior_count > 0 && (
+                        <span className="ml-1 text-purple-600 font-medium">(실내 월{v.interior_count}회)</span>
+                      )}
                     </div>
                     {v.monthly_price && (
                       <div>
