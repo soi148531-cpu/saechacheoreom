@@ -94,7 +94,11 @@ export async function buildDetailedBillingMessage(
     const lines: string[] = []
     lines.push(`[${vehicle.carName}] ${vehicle.plateNumber}`)
     vehicle.records.forEach(r => {
-      const serviceLabel = r.serviceType === 'interior' ? ' (+실내)' : r.serviceType === 'interior_only' ? ` (${r.memo?.match(/^\[서비스:(.+?)\]/)?.[1] ?? '맞춤작업'})` : ''
+      const serviceLabel = r.serviceType === 'interior'
+      ? (r.memo?.startsWith('[쿠폰:실내]') ? ' (+실내 🎫쿠폰사용)' : ' (+실내)')
+      : r.serviceType === 'interior_only'
+      ? ` (${r.memo?.match(/^\[서비스:(.+?)\]/)?.[1] ?? '맞춤작업'})`
+      : ''
       lines.push(`   ${r.date} 세차${serviceLabel}: ${formatPrice(r.price)}`)
     })
     lines.push(`  소계: ${formatPrice(vehicle.subtotal)}`)

@@ -950,7 +950,10 @@ export default function BillingPage() {
                                   <span className="text-gray-600 flex items-center gap-1">
                                     {d.getMonth() + 1}/{d.getDate()}
                                     {r.service_type === 'interior_only' && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">{(r as {memo?: string}).memo?.match(/^\[서비스:(.+?)\]/)?.[1] ?? '맞춤작업'}</span>}
-                                    {r.service_type === 'interior' && <span className="text-xs text-purple-600">(+실내)</span>}
+                                    {r.service_type === 'interior' && ((r as {memo?: string}).memo?.startsWith('[쿠폰:실내]')
+                                      ? <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">🎫 쿠폰사용</span>
+                                      : <span className="text-xs text-purple-600">(+실내)</span>
+                                    )}
                                   </span>
                                   <span className="font-medium text-gray-900">{formatPrice(r.price)}</span>
                                 </div>
