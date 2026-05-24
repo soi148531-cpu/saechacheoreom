@@ -536,15 +536,23 @@ export default function BillingPage() {
         serviceType: r.service_type ?? 'regular',
         memo: r.memo ?? null,
       })),
-      subtotal: vb.totalAmount
+      subtotal: vb.totalAmount,
+      paidAmount: vb.paidAmount,
+      partialHistory: vb.partialHistory,
     }))
+
+    // 부분납 차감 후 잔여금액으로 총액 계산
+    const remainingTotal = cb.vehicles.reduce((sum, vb) => {
+      const remaining = vb.totalAmount - (vb.paidAmount ?? 0)
+      return sum + Math.max(0, remaining)
+    }, 0)
 
     const msg = await buildDetailedBillingMessage(
       cb.customer.name,
       cb.customer.phone || null,
       String(monthNum),
       vehicleDetails,
-      cb.totalAmount
+      remainingTotal
     )
     await navigator.clipboard.writeText(msg)
     alert('클립보드에 복사되었습니다. 카카오톡에 붙여넣기 하세요.')

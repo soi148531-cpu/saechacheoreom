@@ -82,6 +82,8 @@ export async function buildDetailedBillingMessage(
     plateNumber: string
     records: Array<{ date: string; price: number; serviceType?: string; memo?: string | null }>
     subtotal: number
+    paidAmount?: number
+    partialHistory?: Array<{ date: string; amount: number }>
   }>,
   totalAmount: number
 ): Promise<string> {
@@ -96,6 +98,18 @@ export async function buildDetailedBillingMessage(
       lines.push(`   ${r.date} 세차${serviceLabel}: ${formatPrice(r.price)}`)
     })
     lines.push(`  소계: ${formatPrice(vehicle.subtotal)}`)
+
+    // 부분납 이력이 있으면 기납부 차감 표시
+    const paid = vehicle.paidAmount ?? 0
+    if (paid > 0 && paid < vehicle.subtotal) {
+      const dateStr = vehicle.partialHistory?.map(p => {
+        const d = new Date(p.date)
+        return `${d.getMonth()+1}/${d.getDate()}(${formatPrice(p.amount)}원)`
+      }).join(', ') ?? ''
+      lines.push(`  기납부: -${formatPrice(paid)}원${dateStr ? ` (${dateStr})` : ''}`)
+      lines.push(`  잔여: ${formatPrice(vehicle.subtotal - paid)}원`)
+    }
+
     return lines.join('\n')
   }).join('\n\n')
 
@@ -109,7 +123,7 @@ export async function buildDetailedBillingMessage(
       '',
       vehicleText,
       '',
-      `총 청구금액: ${formatPrice(totalAmount)}`,
+      `총 청구금액: ${formatPrice(totalAmount)}원`,
       '입금계좌: (계좌 정보)',
     ].filter(l => l !== undefined).join('\n')
   }
@@ -120,7 +134,7 @@ export async function buildDetailedBillingMessage(
     phone: phone || '',
     month: `${month}`,
     vehicle_details: vehicleText,
-    total_amount: totalAmount.toLocaleString('ko-KR'),
+    total_amount: formatPrice(totalAmount),
   })
 }
 
