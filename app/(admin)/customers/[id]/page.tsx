@@ -98,16 +98,26 @@ export default function CustomerDetailPage() {
   async function issueCoupon() {
     if (couponCount < 1) return
     setCouponLoading(true)
-    await fetch('/api/coupons', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_id: id, total_issued: couponCount, note: couponNote || null }),
-    })
-    setCouponLoading(false)
-    setShowCouponForm(false)
-    setCouponCount(3)
-    setCouponNote('')
-    fetchCoupons()
+    try {
+      const res = await fetch('/api/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: id, total_issued: couponCount, note: couponNote || null }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        alert(`쿠폰 발행 실패: ${json.message || '알 수 없는 오류'}`)
+        return
+      }
+      setShowCouponForm(false)
+      setCouponCount(3)
+      setCouponNote('')
+      fetchCoupons()
+    } catch (e) {
+      alert('쿠폰 발행 중 오류가 발생했습니다')
+    } finally {
+      setCouponLoading(false)
+    }
   }
 
   async function saveEdit() {
