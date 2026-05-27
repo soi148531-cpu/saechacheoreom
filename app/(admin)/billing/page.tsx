@@ -555,7 +555,6 @@ export default function BillingPage() {
       remainingTotal
     )
     await navigator.clipboard.writeText(msg)
-    alert('클립보드에 복사되었습니다. 카카오톡에 붙여넣기 하세요.')
   }
 
   function handleMessageUpdate(billingId: string, vehicleId: string) {
