@@ -328,7 +328,8 @@ export default function BillingPage() {
       result = result
         .map(cb => ({ ...cb, vehicles: cb.vehicles.filter(vb => {
           if (messageFilter === 'sent') return vb.messageSentAt !== null
-          if (messageFilter === 'unsent') return vb.messageSentAt === null
+          if (messageFilter === 'unsent') return vb.messageSentAt === null && vb.paymentStatus !== 'paid'
+          if (messageFilter === 'paid') return vb.paymentStatus === 'paid'
           return true
         }) }))
         .filter(cb => cb.vehicles.length > 0)
@@ -663,14 +664,18 @@ export default function BillingPage() {
 
         {/* 메시지 필터 탭 */}
         <div className="flex gap-1">
-          {([['all', '전체'], ['sent', '발송완료'], ['unsent', '미발송']] as const).map(([val, label]) => (
+          {([['all', '전체'], ['sent', '발송완료'], ['unsent', '미발송'], ['paid', '입금완료']] as const).map(([val, label]) => (
             <button
               key={val}
               onClick={() => setMessageFilter(val)}
               className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${
                 messageFilter === val
-                  ? 'bg-purple-600 text-white border-purple-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+                  ? val === 'paid'
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-purple-600 text-white border-purple-600'
+                  : val === 'paid'
+                    ? 'bg-white text-green-600 border-green-300 hover:border-green-500'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
               }`}
             >
               {label}

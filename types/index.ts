@@ -39,6 +39,7 @@ export interface Vehicle {
   start_date: string
   end_date: string | null
   status: VehicleStatus
+  unit_number: string | null
   interior_count: number | null
   is_legacy: boolean | null
   created_at: string
@@ -150,7 +151,7 @@ export interface WorkerPayroll {
   worker?: Worker
 }
 
-export type MessageFilter = 'all' | 'sent' | 'unsent'
+export type MessageFilter = 'all' | 'sent' | 'unsent' | 'paid'
 
 export interface MessageTemplate {
   id: string

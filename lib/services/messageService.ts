@@ -108,10 +108,10 @@ export async function buildDetailedBillingMessage(
     if (paid > 0 && paid < vehicle.subtotal) {
       const dateStr = vehicle.partialHistory?.map(p => {
         const d = new Date(p.date)
-        return `${d.getMonth()+1}/${d.getDate()}(${formatPrice(p.amount)}원)`
+        return `${d.getMonth()+1}/${d.getDate()}(${formatPrice(p.amount)})`
       }).join(', ') ?? ''
-      lines.push(`  기납부: -${formatPrice(paid)}원${dateStr ? ` (${dateStr})` : ''}`)
-      lines.push(`  잔여: ${formatPrice(vehicle.subtotal - paid)}원`)
+      lines.push(`  기납부: -${formatPrice(paid)}${dateStr ? ` (${dateStr})` : ''}`)
+      lines.push(`  잔여: ${formatPrice(vehicle.subtotal - paid)}`)
     }
 
     return lines.join('\n')
@@ -127,7 +127,7 @@ export async function buildDetailedBillingMessage(
       '',
       vehicleText,
       '',
-      `총 청구금액: ${formatPrice(totalAmount)}원`,
+      `총 청구금액: ${formatPrice(totalAmount)}`,
       '입금계좌: (계좌 정보)',
     ].filter(l => l !== undefined).join('\n')
   }
@@ -138,7 +138,7 @@ export async function buildDetailedBillingMessage(
     phone: phone || '',
     month: `${month}`,
     vehicle_details: vehicleText,
-    total_amount: formatPrice(totalAmount),
+    total_amount: totalAmount.toLocaleString('ko-KR'),
   })
 }
 
@@ -172,9 +172,10 @@ export function formatMessageTime(messageSentAt: string | null): string {
  */
 export function filterMessageStatus(
   billings: Billing[],
-  filter: 'all' | 'sent' | 'unsent'
+  filter: 'all' | 'sent' | 'unsent' | 'paid'
 ): Billing[] {
   if (filter === 'sent') return billings.filter(b => b.message_sent_at !== null)
-  if (filter === 'unsent') return billings.filter(b => b.message_sent_at === null)
+  if (filter === 'unsent') return billings.filter(b => b.message_sent_at === null && b.payment_status !== 'paid')
+  if (filter === 'paid') return billings.filter(b => b.payment_status === 'paid')
   return billings
 }
