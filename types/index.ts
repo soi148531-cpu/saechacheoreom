@@ -153,6 +153,36 @@ export interface WorkerPayroll {
 
 export type MessageFilter = 'all' | 'sent' | 'unsent' | 'paid'
 
+export interface ExpenseCategory {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface ExpenseRecurring {
+  id: string
+  name: string
+  category_id: string | null
+  amount: number
+  day_of_month: number
+  is_active: boolean
+  created_at: string
+  category?: ExpenseCategory
+}
+
+export interface Expense {
+  id: string
+  year_month: string
+  date: string
+  category_id: string | null
+  amount: number
+  memo: string | null
+  is_recurring: boolean
+  recurring_id: string | null
+  created_at: string
+  category?: ExpenseCategory
+}
+
 export interface MessageTemplate {
   id: string
   template_key: string
