@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical, RefreshCw } from 'lucide-react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical, TrendingUp } from 'lucide-react'
 import { DndContext, closestCenter, type DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { createClient, db } from '@/lib/supabase/client'
-import { generateSchedules, parseLocalDate, getDateLabel, getWeekdayLabel, type RepeatMode } from '@/lib/schedule/generator'
+import { formatPrice } from '@/lib/utils'
+import { usePricing } from '@/lib/hooks/usePricing'
 import type { Vehicle, Schedule } from '@/types'
 
 type ScheduleWithVehicle = Schedule & {
@@ -14,10 +15,13 @@ type ScheduleWithVehicle = Schedule & {
   vehicle: Vehicle & { customer: { name: string; apartment: string } }
 }
 
+type ViewMode = 'calendar' | 'revenue'
+
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
 export default function CalendarPage() {
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   const today = new Date()
   const [year,  setYear]  = useState(today.getFullYear())
@@ -27,13 +31,19 @@ export default function CalendarPage() {
   const [vehicles,     setVehicles]     = useState<(Vehicle & { customer?: { name: string; apartment: string } })[]>([])
   const [loading,      setLoading]      = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedDateDoneSet, setSelectedDateDoneSet] = useState<Set<string>>(new Set())
   const [searchQuery,  setSearchQuery]  = useState('')
   const [searchActive, setSearchActive] = useState(false)
   const [showAddForm,      setShowAddForm]      = useState(false)
-  const [addMode,          setAddMode]          = useState<'onetime' | 'interior'>('onetime')
   const [addVehicleSearch, setAddVehicleSearch] = useState('')
   const [reorderMode,      setReorderMode]      = useState(false)
   const [manualOrder,      setManualOrder]      = useState<string[]>([])
+  const [viewMode,         setViewMode]         = useState<ViewMode>('calendar')
+
+  const touchStartX = useRef<number>(0)
+  const touchStartY = useRef<number>(0)
+
+  const { priceTable } = usePricing()
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -66,12 +76,29 @@ export default function CalendarPage() {
   }, [year, month, supabase])
 
   useEffect(() => { fetchSchedules() }, [fetchSchedules])
+
+  useEffect(() => {
+    if (!selectedDate) { setSelectedDateDoneSet(new Set()); return }
+    supabase
+      .from('wash_records')
+      .select('vehicle_id')
+      .eq('wash_date', selectedDate)
+      .then(({ data }) => {
+        const rows = (data ?? []) as { vehicle_id: string }[]
+        setSelectedDateDoneSet(new Set(rows.map(r => r.vehicle_id)))
+      })
+  }, [selectedDate, supabase])
+
   useEffect(() => {
     setShowAddForm(false)
     setAddVehicleSearch('')
     setReorderMode(false)
     setManualOrder([])
   }, [selectedDate])
+
+  function schedulePrice(s: ScheduleWithVehicle): number {
+    return (s.vehicle?.unit_price ?? 0) + (s.has_interior ? priceTable.interior : 0)
+  }
 
   const byDate = useMemo(() => {
     const map: Record<string, ScheduleWithVehicle[]> = {}
@@ -82,6 +109,28 @@ export default function CalendarPage() {
     return map
   }, [schedules])
 
+  const revenueByDate = useMemo(() => {
+    const map: Record<string, number> = {}
+    Object.entries(byDate).forEach(([date, list]) => {
+      map[date] = list.reduce((sum, s) => sum + schedulePrice(s), 0)
+    })
+    return map
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [byDate, priceTable])
+
+  const monthlyTotal = useMemo(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => schedules.reduce((sum, s) => sum + schedulePrice(s), 0),
+    [schedules, priceTable]
+  )
+
+  const { exteriorCount, interiorCount } = useMemo(() => {
+    type S = { schedule_type?: string }
+    const exterior = schedules.filter(s => (s as unknown as S).schedule_type !== 'interior_only').length
+    const interior = schedules.filter(s => s.has_interior || (s as unknown as S).schedule_type === 'interior_only').length
+    return { exteriorCount: exterior, interiorCount: interior }
+  }, [schedules])
+
   const searchHighlights = useMemo(() => {
     if (!searchQuery.trim()) return new Set<string>()
     const q = searchQuery.trim().toLowerCase()
@@ -90,19 +139,6 @@ export default function CalendarPage() {
       s.vehicle?.car_name?.toLowerCase().includes(q)
     )
     return new Set(matched.map(s => s.scheduled_date))
-  }, [schedules, searchQuery])
-
-  const searchMatchedIds = useMemo(() => {
-    if (!searchQuery.trim()) return new Set<string>()
-    const q = searchQuery.trim().toLowerCase()
-    return new Set(
-      schedules
-        .filter(s =>
-          s.vehicle?.plate_number?.toLowerCase().includes(q) ||
-          s.vehicle?.car_name?.toLowerCase().includes(q)
-        )
-        .map(s => s.id)
-    )
   }, [schedules, searchQuery])
 
   const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
@@ -138,59 +174,16 @@ export default function CalendarPage() {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
+  // 셀 금액 표시: 135000 → "13.5만" / 80000 → "8만"
+  function formatCellAmount(amount: number): string {
+    if (amount <= 0) return ''
+    const man = amount / 10000
+    if (Number.isInteger(man)) return `${man}만`
+    return `${man.toFixed(1)}만`
+  }
+
   async function deleteSchedule(scheduleId: string) {
-    // 현재 삭제하려는 일정 정보 가져오기
-    const scheduleToDelete = schedules.find(s => s.id === scheduleId)
-    if (!scheduleToDelete) return
-
-    const vehicleId = scheduleToDelete.vehicle_id
-    const scheduledDate = scheduleToDelete.scheduled_date
-    const yearMonth = scheduledDate.slice(0, 7)
-
-    // 같은 vehicle_id + 같은 year-month인 일정들 개수 세기
-    const sameMonthSchedules = schedules.filter(
-      s => s.vehicle_id === vehicleId && 
-           s.scheduled_date.slice(0, 7) === yearMonth &&
-           !s.is_deleted
-    )
-
-    // 월3회 이상 감지 시 경고
-    if (sameMonthSchedules.length >= 3) {
-      const confirmed = confirm(
-        `⚠️ 월 3회 이상 예약된 차량입니다.\n\n` +
-        `${sameMonthSchedules.map(s => s.scheduled_date).join(', ')} (총 ${sameMonthSchedules.length}건)\n\n` +
-        `${scheduledDate} 일정을 삭제하시겠습니까?`
-      )
-      if (!confirmed) return
-    }
-
-    // 일정 삭제
     await db().from('schedules').update({ is_deleted: true }).eq('id', scheduleId)
-
-    // 삭제 후 남은 일정들 조회
-    const monthStart = `${yearMonth}-01`
-    const monthEnd = `${yearMonth}-${String(new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0).getDate()).padStart(2, '0')}`
-    
-    const { data: remainingInMonth } = await supabase
-      .from('schedules')
-      .select('id')
-      .eq('vehicle_id', vehicleId)
-      .gte('scheduled_date', monthStart)
-      .lte('scheduled_date', monthEnd)
-      .eq('is_deleted', false)
-
-    // 남은 일정이 3개 이상이면 is_overcount=true, 아니면 false로 모두 업데이트
-    const hasOvercount = (remainingInMonth?.length ?? 0) >= 3
-
-    // 같은 월의 모든 일정에서 is_overcount 플래그 업데이트
-    await db()
-      .from('schedules')
-      .update({ is_overcount: hasOvercount })
-      .eq('vehicle_id', vehicleId)
-      .gte('scheduled_date', monthStart)
-      .lte('scheduled_date', monthEnd)
-      .eq('is_deleted', false)
-
     fetchSchedules()
   }
 
@@ -208,35 +201,8 @@ export default function CalendarPage() {
     fetchSchedules()
   }
 
-  function handleAddFormToggle(mode: 'onetime' | 'interior') {
-    if (showAddForm && addMode === mode) {
-      setShowAddForm(false)
-    } else {
-      setShowAddForm(true)
-      setAddMode(mode)
-      setAddVehicleSearch('')
-    }
-  }
-
-  async function addInteriorSchedule(vehicleId: string) {
-    if (!selectedDate) return
-    await db().from('schedules').insert({
-      vehicle_id:     vehicleId,
-      scheduled_date: selectedDate,
-      schedule_type:  'interior_only',
-      has_interior:   true,
-      is_overcount:   false,
-      is_deleted:     false,
-    })
-    setShowAddForm(false)
-    setAddVehicleSearch('')
-    fetchSchedules()
-  }
-
   async function addOnetimeSchedule(vehicleId: string) {
     if (!selectedDate) return
-    
-    // 새로운 일정 추가
     await db().from('schedules').insert({
       vehicle_id: vehicleId,
       scheduled_date: selectedDate,
@@ -244,25 +210,6 @@ export default function CalendarPage() {
       is_overcount: false,
       is_deleted: false,
     })
-
-    // 추가 후 해당 월의 같은 vehicle 일정들 세기
-    const yearMonth = selectedDate.slice(0, 7)
-    const monthStart = `${yearMonth}-01`
-    const monthEnd = `${yearMonth}-${String(new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0).getDate()).padStart(2, '0')}`
-    
-    const { data: monthSchedules } = await supabase
-      .from('schedules')
-      .select('id')
-      .eq('vehicle_id', vehicleId)
-      .gte('scheduled_date', monthStart)
-      .lte('scheduled_date', monthEnd)
-      .eq('is_deleted', false)
-
-    // 3개 이상이면 all schedule에 is_overcount = true
-    if (monthSchedules && monthSchedules.length >= 3) {
-      await db().from('schedules').update({ is_overcount: true }).eq('vehicle_id', vehicleId).gte('scheduled_date', monthStart).lte('scheduled_date', monthEnd).eq('is_deleted', false)
-    }
-
     setShowAddForm(false)
     setAddVehicleSearch('')
     fetchSchedules()
@@ -290,6 +237,20 @@ export default function CalendarPage() {
     )
   }
 
+  // 스와이프 감지
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current)
+    if (dy > 40) return // 수직 스크롤이면 무시
+    if (dx < -60) setViewMode('revenue')
+    else if (dx > 60) setViewMode('calendar')
+  }
+
   const selectedSchedules = useMemo(() => {
     const list = selectedDate ? (byDate[selectedDate] ?? []) : []
     const hasSortOrder = list.some(s => s.sort_order != null)
@@ -300,8 +261,8 @@ export default function CalendarPage() {
       const aptA = a.vehicle?.customer?.apartment ?? ''
       const aptB = b.vehicle?.customer?.apartment ?? ''
       if (aptA !== aptB) return aptA.localeCompare(aptB, 'ko')
-      const unitA = a.vehicle?.customer?.unit_number ?? ''
-      const unitB = b.vehicle?.customer?.unit_number ?? ''
+      const unitA = a.vehicle?.unit_number ?? ''
+      const unitB = b.vehicle?.unit_number ?? ''
       return unitA.localeCompare(unitB, 'ko')
     })
   }, [selectedDate, byDate])
@@ -320,10 +281,17 @@ export default function CalendarPage() {
     return vehicles.filter(v =>
       v.plate_number?.toLowerCase().includes(q) ||
       v.car_name?.toLowerCase().includes(q) ||
-      v.customer?.unit_number?.toLowerCase().includes(q) ||
+      v.unit_number?.toLowerCase().includes(q) ||
       v.customer?.name?.toLowerCase().includes(q)
     ).slice(0, 10)
   }, [vehicles, addVehicleSearch])
+
+  const selectedDayTotal = useMemo(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => selectedSchedules.reduce((sum, s) => sum + schedulePrice(s), 0),
+    [selectedSchedules, priceTable]
+  )
+
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
   return (
@@ -381,10 +349,61 @@ export default function CalendarPage() {
             </p>
           </div>
         )}
+
+        {/* 뷰 모드 탭 */}
+        <div className="max-w-2xl mx-auto mt-2 flex items-center justify-between gap-2">
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                viewMode === 'calendar'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              캘린더
+            </button>
+            <button
+              onClick={() => setViewMode('revenue')}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                viewMode === 'revenue'
+                  ? 'bg-white text-green-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              예상매출
+            </button>
+          </div>
+
+          {/* 예상매출 모드일 때 이달 총액 표시 */}
+          {viewMode === 'revenue' && !loading && (
+            <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
+              <TrendingUp size={13} className="text-green-600" />
+              <span className="text-xs text-green-600 font-medium">이달 예상</span>
+              <span className="text-sm font-bold text-green-800">{formatPrice(monthlyTotal)}</span>
+            </div>
+          )}
+
+          {/* 캘린더 모드일 때 범례 */}
+          {viewMode === 'calendar' && (
+            <div className="flex items-center gap-2 text-[10px] text-gray-400">
+              <span className="flex items-center gap-0.5">
+                <span className="text-green-500 font-bold">/N</span> 실내
+              </span>
+              <span className="flex items-center gap-0.5">
+                <AlertTriangle size={9} className="text-orange-400" /> 월3회
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 캘린더 */}
-      <div className="flex-1 overflow-y-auto bg-white">
+      {/* 캘린더 — 스와이프 감지 */}
+      <div
+        className="flex-1 overflow-y-auto bg-white"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="max-w-2xl mx-auto px-2 py-2">
           <div className="grid grid-cols-7 mb-1">
             {WEEKDAYS.map((d, i) => (
@@ -401,45 +420,48 @@ export default function CalendarPage() {
 
           <div className="grid grid-cols-7 gap-0.5">
             {calendarDays.map((day, idx) => {
-              if (!day) return <div key={`empty-${idx}`} className="h-14" />
+              if (!day) return <div key={`empty-${idx}`} className="h-[68px]" />
 
-              const dateKey      = formatDateKey(day)
-              const daySchedules = byDate[dateKey] ?? []
-              const count        = daySchedules.length
-              const isToday      = dateKey === todayKey
-              const isSelected   = dateKey === selectedDate
-              const isHighlight  = searchQuery.trim() && searchHighlights.has(dateKey)
-              const isOvercount    = daySchedules.some(s => s.is_overcount)
+              const dateKey       = formatDateKey(day)
+              const daySchedules  = byDate[dateKey] ?? []
+              const count         = daySchedules.length
+              const isToday       = dateKey === todayKey
+              const isSelected    = dateKey === selectedDate
+              const isHighlight   = viewMode === 'calendar' && searchQuery.trim() && searchHighlights.has(dateKey)
+              const isOvercount   = daySchedules.some(s => s.is_overcount)
               const interiorCount = daySchedules.filter(s => s.has_interior).length
               const dow           = new Date(year, month, day).getDay()
+              const revenue       = revenueByDate[dateKey] ?? 0
 
               return (
                 <button
                   key={dateKey}
                   onClick={() => setSelectedDate(isSelected ? null : dateKey)}
                   className={`
-                    relative h-14 rounded-lg flex flex-col items-center justify-start pt-1.5 transition-colors
+                    relative h-[68px] rounded-lg flex flex-col items-center justify-start pt-1.5 transition-colors
                     ${isSelected  ? 'bg-blue-600 text-white'
                     : isHighlight ? 'bg-yellow-50 border-2 border-yellow-400'
                     : isToday     ? 'bg-blue-50 border border-blue-200'
                     : 'hover:bg-gray-50 border border-transparent'}
                   `}
                 >
+                  {/* 날짜 숫자 */}
                   <span className={`
                     text-xs font-semibold leading-none
-                    ${isSelected ? 'text-white'
+                    ${isSelected  ? 'text-white'
                     : isHighlight ? 'text-yellow-700'
-                    : isToday    ? 'text-blue-600'
-                    : dow === 0  ? 'text-red-400'
-                    : dow === 6  ? 'text-blue-400'
+                    : isToday     ? 'text-blue-600'
+                    : dow === 0   ? 'text-red-400'
+                    : dow === 6   ? 'text-blue-400'
                     : 'text-gray-700'}
                   `}>
                     {day}
                   </span>
 
+                  {/* 작업 수 배지 */}
                   {count > 0 && (
                     <span className={`
-                      mt-1 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center
+                      mt-0.5 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none
                       ${isSelected  ? 'bg-white text-blue-600'
                       : isHighlight ? 'bg-yellow-400 text-white'
                       : isOvercount ? 'bg-orange-100 text-orange-600'
@@ -449,13 +471,25 @@ export default function CalendarPage() {
                     </span>
                   )}
 
-                  {/* 실내 카운트 표시 */}
-                  {interiorCount > 0 && !isSelected && (
-                    <span className="text-[9px] font-bold text-green-500 leading-none -mt-0.5">
+                  {/* 캘린더 모드: 실내 대수 /N */}
+                  {viewMode === 'calendar' && interiorCount > 0 && (
+                    <span className={`text-[10px] font-bold leading-none mt-0.5 ${
+                      isSelected ? 'text-green-300' : 'text-green-500'
+                    }`}>
                       /{interiorCount}
                     </span>
                   )}
 
+                  {/* 예상매출 모드: 금액 + 실내 */}
+                  {viewMode === 'revenue' && count > 0 && (
+                    <span className={`text-[10px] font-semibold leading-none mt-0.5 ${
+                      isSelected ? 'text-blue-100' : 'text-gray-500'
+                    }`}>
+                      {formatCellAmount(revenue)}{interiorCount > 0 ? `/${interiorCount}` : ''}
+                    </span>
+                  )}
+
+                  {/* 초과 경고 */}
                   {isOvercount && !isSelected && (
                     <span className="absolute top-0.5 right-0.5">
                       <AlertTriangle size={9} className="text-orange-400" />
@@ -466,86 +500,104 @@ export default function CalendarPage() {
             })}
           </div>
 
+          {/* 하단 요약 */}
           {!loading && (
             <div className="mt-3 text-xs text-gray-600 grid grid-cols-3 gap-3">
-              <div className="text-left text-gray-700">이번달 총 작업대수 {schedules.length}대</div>
-              <div className="text-center">이번달 등록 차량 수 {vehicles.length}대</div>
-              <div className="text-right">정기 차량 수 {regularVehicles.length}대</div>
+              {viewMode === 'calendar' ? (
+                <>
+                  <div className="text-left text-gray-700">실외 {exteriorCount}대 · 실내 {interiorCount}대</div>
+                  <div className="text-center">이번달 등록 차량 수 {vehicles.length}대</div>
+                  <div className="text-right">정기 차량 수 {regularVehicles.length}대</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-left text-gray-700">예정 {schedules.length}대</div>
+                  <div className="text-center text-green-600 font-semibold">예상 총매출</div>
+                  <div className="text-right font-bold text-green-700">{formatPrice(monthlyTotal)}</div>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* 선택된 날짜 상세 */}
+      {/* 선택된 날짜 상세 패널 */}
       {selectedDate && (
         <div className="border-t border-gray-200 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
           <div className="max-w-2xl mx-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900 text-sm">
-                {month + 1}월 {parseInt(selectedDate.split('-')[2])}일 —&nbsp;
-                <span className="text-blue-600">{selectedSchedules.length}대</span>
-              </h3>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={toggleReorderMode}
-                  className={`flex items-center gap-0.5 text-[11px] border px-1.5 py-1 rounded-lg transition-colors whitespace-nowrap ${
-                    reorderMode
-                      ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <GripVertical size={11} />
-                  {reorderMode ? '완료' : '순서 변경'}
-                </button>
-                <button
-                  onClick={() => handleAddFormToggle('interior')}
-                  className={`flex items-center gap-0.5 text-[11px] border px-1.5 py-1 rounded-lg transition-colors whitespace-nowrap ${
-                    showAddForm && addMode === 'interior'
-                      ? 'bg-green-600 text-white border-green-600'
-                      : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                  }`}
-                >
-                  <Plus size={11} />
-                  실내추가
-                </button>
-                <button
-                  onClick={() => handleAddFormToggle('onetime')}
-                  className={`flex items-center gap-0.5 text-[11px] border px-1.5 py-1 rounded-lg transition-colors whitespace-nowrap ${
-                    showAddForm && addMode === 'onetime'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
-                  }`}
-                >
-                  <Plus size={11} />
-                  일세차 추가
-                </button>
-                <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600">
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
 
-            {/* 차량 추가 폼 (일세차 / 실내추가 공용) */}
-            {showAddForm && (
-              <div className={`px-4 py-3 border-b ${
-                addMode === 'interior'
-                  ? 'bg-green-50 border-green-100'
-                  : 'bg-blue-50 border-blue-100'
-              }`}>
-                <p className={`text-xs font-semibold mb-2 ${addMode === 'interior' ? 'text-green-700' : 'text-blue-700'}`}>
-                  {addMode === 'interior' ? '🛋️ 실내추가 — 차량 선택' : '일세차 추가 — 차량 선택'}
-                </p>
+            {/* ── 캘린더 모드 패널 헤더 ── */}
+            {viewMode === 'calendar' && (
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">
+                    {month + 1}월 {parseInt(selectedDate.split('-')[2])}일 —&nbsp;
+                    <span className="text-blue-600">{selectedSchedules.length}대</span>
+                  </h3>
+                  {selectedDayTotal > 0 && (
+                    <p className="text-xs text-green-600 font-semibold mt-0.5">
+                      일일 예상 매출 {formatPrice(selectedDayTotal)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={toggleReorderMode}
+                    className={`flex items-center gap-1 text-xs border px-2 py-1 rounded-lg transition-colors ${
+                      reorderMode
+                        ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <GripVertical size={12} />
+                    {reorderMode ? '완료' : '순서 변경'}
+                  </button>
+                  <button
+                    onClick={() => setShowAddForm(v => !v)}
+                    className="flex items-center gap-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <Plus size={12} />
+                    일세차 추가
+                  </button>
+                  <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── 예상매출 모드 패널 헤더 ── */}
+            {viewMode === 'revenue' && (
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">
+                    {month + 1}월 {parseInt(selectedDate.split('-')[2])}일&nbsp;—&nbsp;
+                    <span className="text-blue-600">{selectedSchedules.length}대 예정</span>
+                  </h3>
+                  <p className="text-[11px] text-gray-400 mt-0.5">차량별 단가 기준</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-right">
+                    <p className="text-[10px] text-green-600 font-semibold leading-none mb-1">예상 매출</p>
+                    <p className="text-xl font-bold text-green-700 leading-none">{formatPrice(selectedDayTotal)}</p>
+                  </div>
+                  <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── 캘린더 모드: 일세차 추가 폼 ── */}
+            {viewMode === 'calendar' && showAddForm && (
+              <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
                 <input
                   autoFocus
                   type="text"
                   value={addVehicleSearch}
                   onChange={e => setAddVehicleSearch(e.target.value)}
                   placeholder="차량명, 번호판, 동호수, 고객명 검색"
-                  className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 bg-white mb-2 ${
-                    addMode === 'interior'
-                      ? 'border-green-300 focus:ring-green-400'
-                      : 'border-blue-300 focus:ring-blue-400'
-                  }`}
+                  className="w-full text-sm border border-blue-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white mb-2"
                 />
                 {filteredAddVehicles.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-2">검색 결과 없음</p>
@@ -554,20 +606,16 @@ export default function CalendarPage() {
                     {filteredAddVehicles.map(v => (
                       <button
                         key={v.id}
-                        onClick={() => addMode === 'interior' ? addInteriorSchedule(v.id) : addOnetimeSchedule(v.id)}
-                        className={`w-full text-left flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-sm transition-colors border ${
-                          addMode === 'interior'
-                            ? 'hover:bg-green-100 border-green-100'
-                            : 'hover:bg-blue-100 border-blue-100'
-                        }`}
+                        onClick={() => addOnetimeSchedule(v.id)}
+                        className="w-full text-left flex items-center gap-2 bg-white hover:bg-blue-100 border border-blue-100 rounded-lg px-3 py-2 text-sm transition-colors"
                       >
                         <span className="font-medium text-gray-900">{v.car_name}</span>
                         <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
+                        <span className="text-xs text-gray-400">{v.unit_number}</span>
                         {v.customer?.apartment && (
-                          <span className={`text-xs flex items-center gap-0.5 ml-auto ${addMode === 'interior' ? 'text-green-600' : 'text-blue-500'}`}>
+                          <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
                             <Home size={10} />
                             {v.customer.apartment}
-                            {v.customer?.unit_number && ` · ${v.customer.unit_number}`}
                           </span>
                         )}
                       </button>
@@ -577,46 +625,97 @@ export default function CalendarPage() {
               </div>
             )}
 
-            <div className="max-h-72 overflow-y-auto">
-              {displayedSchedules.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-6">예약 없음</p>
-              ) : reorderMode ? (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={manualOrder} strategy={verticalListSortingStrategy}>
+            {/* ── 캘린더 모드: 일정 목록 ── */}
+            {viewMode === 'calendar' && (
+              <div className="max-h-72 overflow-y-auto">
+                {displayedSchedules.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 py-6">예약 없음</p>
+                ) : reorderMode ? (
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={manualOrder} strategy={verticalListSortingStrategy}>
+                      {displayedSchedules.map(s => (
+                        <SortableRow key={s.id} id={s.id}>
+                          <ScheduleRow
+                            schedule={s}
+                            onDelete={() => deleteSchedule(s.id)}
+                            onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
+                            onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
+                            done={selectedDateDoneSet.has(s.vehicle_id)}
+                          />
+                        </SortableRow>
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                ) : (
+                  <div className="divide-y divide-gray-100">
                     {displayedSchedules.map(s => (
-                      <SortableRow key={s.id} id={s.id}>
-                        <ScheduleRow
-                          schedule={s}
-                          onDelete={() => deleteSchedule(s.id)}
-                          onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
-                          onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                          selectedDate={selectedDate}
-                          supabaseClient={supabase}
-                          onRepeatReset={fetchSchedules}
-                          highlighted={searchMatchedIds.has(s.id)}
-                        />
-                      </SortableRow>
+                      <ScheduleRow
+                        key={s.id}
+                        schedule={s}
+                        onDelete={() => deleteSchedule(s.id)}
+                        onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
+                        onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
+                        done={selectedDateDoneSet.has(s.vehicle_id)}
+                      />
                     ))}
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {displayedSchedules.map(s => (
-                    <ScheduleRow
-                      key={s.id}
-                      schedule={s}
-                      onDelete={() => deleteSchedule(s.id)}
-                      onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
-                      onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                      selectedDate={selectedDate}
-                      supabaseClient={supabase}
-                      onRepeatReset={fetchSchedules}
-                      highlighted={searchMatchedIds.has(s.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 예상매출 모드: 차량별 금액 목록 ── */}
+            {viewMode === 'revenue' && (
+              <div className="max-h-72 overflow-y-auto">
+                {selectedSchedules.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 py-6">예약 없음</p>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {selectedSchedules.map(s => {
+                      const unitP     = s.vehicle?.unit_price ?? 0
+                      const interiorP = s.has_interior ? priceTable.interior : 0
+                      const total     = unitP + interiorP
+                      return (
+                        <div key={s.id} className="px-4 py-2.5 flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-medium text-sm text-gray-900">{s.vehicle?.car_name}</span>
+                              <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                {s.vehicle?.plate_number}
+                              </span>
+                              {s.has_interior && (
+                                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                                  +실내 {formatPrice(interiorP)}
+                                </span>
+                              )}
+                              {s.is_overcount && (
+                                <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
+                                  월3회
+                                </span>
+                              )}
+                            </div>
+                            {s.vehicle?.customer?.name && (
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {s.vehicle.customer.name}
+                                {s.vehicle?.unit_number && ` · ${s.vehicle.unit_number}`}
+                              </p>
+                            )}
+                          </div>
+                          <span className="font-semibold text-sm text-gray-900 ml-3 shrink-0">
+                            {formatPrice(total)}
+                          </span>
+                        </div>
+                      )
+                    })}
+                    {/* 합계 행 */}
+                    <div className="px-4 py-3 bg-blue-50 border-t border-blue-100 flex items-center justify-between">
+                      <span className="text-sm font-bold text-blue-800">합계</span>
+                      <span className="text-lg font-bold text-blue-900">{formatPrice(selectedDayTotal)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
       )}
@@ -647,38 +746,16 @@ function SortableRow({ id, children }: { id: string; children: React.ReactNode }
 
 /* ─── 일정 행 ─── */
 function ScheduleRow({
-  schedule, onDelete, onDateChange, onInteriorToggle, selectedDate, supabaseClient, onRepeatReset, highlighted,
+  schedule, onDelete, onDateChange, onInteriorToggle, done,
 }: {
   schedule: ScheduleWithVehicle
   onDelete: () => void
   onDateChange: (newDate: string) => void
   onInteriorToggle: () => void
-  selectedDate: string
-  supabaseClient: ReturnType<typeof createClient>
-  onRepeatReset: () => void
-  highlighted?: boolean
+  done: boolean
 }) {
-  const [done,           setDone]           = useState(false)
-  const [editingDate,    setEditingDate]    = useState(false)
-  const [newDate,        setNewDate]        = useState(schedule.scheduled_date)
-  const [showRepeat,     setShowRepeat]     = useState(false)
-  const [repeatBase,     setRepeatBase]     = useState(schedule.scheduled_date)
-  const [repeatMode,     setRepeatMode]     = useState<RepeatMode>((schedule.vehicle?.repeat_mode as RepeatMode) ?? 'date')
-  const [repeatSaving,   setRepeatSaving]   = useState(false)
-
-  useEffect(() => {
-    async function check() {
-      const { data } = await supabaseClient
-        .from('wash_records')
-        .select('id')
-        .eq('vehicle_id', schedule.vehicle_id)
-        .eq('wash_date', selectedDate)
-        .maybeSingle()
-      setDone(!!data)
-    }
-    check()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schedule.vehicle_id, selectedDate])
+  const [editingDate, setEditingDate] = useState(false)
+  const [newDate,     setNewDate]     = useState(schedule.scheduled_date)
 
   async function saveDate() {
     if (newDate && newDate !== schedule.scheduled_date) {
@@ -687,48 +764,10 @@ function ScheduleRow({
     setEditingDate(false)
   }
 
-  async function saveRepeatReset() {
-    const v = schedule.vehicle
-    if (!v || !repeatBase) return
-    const mc = v.monthly_count
-    if (mc === 'onetime') return
-    const mcTyped = mc as 'monthly_1' | 'monthly_2' | 'monthly_4'
-    setRepeatSaving(true)
-    try {
-      const today = new Date().toISOString().split('T')[0]
-      // 오늘 이후 미래 일정 모두 삭제
-      await db().from('schedules')
-        .update({ is_deleted: true })
-        .eq('vehicle_id', v.id)
-        .gte('scheduled_date', today)
-      // 새 기준일로 24개월치 재생성
-      const base = parseLocalDate(repeatBase)
-      const items = generateSchedules(v.id, base, mcTyped, repeatMode, 24)
-      // 오늘 이후 것만 insert
-      const future = items.filter(s => s.scheduled_date >= today)
-      if (future.length > 0) {
-        await db().from('schedules').insert(future.map(s => ({
-          vehicle_id: s.vehicle_id,
-          scheduled_date: s.scheduled_date,
-          schedule_type: 'regular',
-          is_overcount: s.is_overcount ?? false,
-          is_deleted: false,
-        })))
-      }
-      // vehicle의 repeat_mode 업데이트
-      await db().from('vehicles').update({ repeat_mode: repeatMode }).eq('id', v.id)
-      setShowRepeat(false)
-      onRepeatReset()
-    } finally {
-      setRepeatSaving(false)
-    }
-  }
-
   const v = schedule.vehicle
 
   return (
-    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''} ${highlighted ? 'bg-yellow-100 border-l-4 border-yellow-500 ring-1 ring-yellow-300' : ''}`}>
-      {/* 상단 행: 완료 아이콘 + 차량 정보 + 삭제 버튼 */}
+    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-3">
         {done
           ? <CheckCircle2 size={20} className="text-green-500 flex-shrink-0 mt-0.5" />
@@ -736,7 +775,6 @@ function ScheduleRow({
         }
 
         <div className="flex-1 min-w-0">
-          {/* 차량명 + 번호판 + 배지 */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-sm font-semibold ${done ? 'line-through text-gray-400' : 'text-gray-900'}`}>
               {v?.car_name}
@@ -744,12 +782,6 @@ function ScheduleRow({
             <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
               {v?.plate_number}
             </span>
-            {(schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only' && (
-              <span className="flex items-center gap-0.5 text-xs bg-green-600 text-white px-1.5 py-0.5 rounded font-semibold">
-                <Sofa size={10} />
-                실내만
-              </span>
-            )}
             {schedule.is_overcount && (
               <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
                 <AlertTriangle size={10} />
@@ -759,11 +791,6 @@ function ScheduleRow({
             {v?.is_legacy && (
               <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">
                 ◆ 기존
-              </span>
-            )}
-            {v?.monthly_count === 'new_customer' && (
-              <span className="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-medium">
-                ★ 신규차량
               </span>
             )}
             {schedule.has_interior && (
@@ -780,10 +807,9 @@ function ScheduleRow({
             )}
           </div>
 
-          {/* 고객명 + 동호수 + 아파트 */}
           <p className="text-xs text-gray-400 mt-0.5">
             {v?.customer?.name}
-            {v?.customer?.unit_number && ` · ${v.customer.unit_number}`}
+            {v?.unit_number && ` · ${v.unit_number}`}
             {v?.customer?.apartment && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-blue-500">
                 <Home size={10} />
@@ -792,7 +818,6 @@ function ScheduleRow({
             )}
           </p>
 
-          {/* 날짜 변경 */}
           <div className="mt-1.5 flex items-center gap-2 flex-wrap">
             {editingDate ? (
               <>
@@ -825,7 +850,6 @@ function ScheduleRow({
               </button>
             )}
 
-            {/* 실내작업 토글 */}
             <button
               onClick={onInteriorToggle}
               className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded transition-colors ${
@@ -837,64 +861,9 @@ function ScheduleRow({
               <Sofa size={10} />
               {schedule.has_interior ? '실내有 ✓' : '실내有 추가'}
             </button>
-            {/* 반복 재설정 (비정기/신규차량 제외) */}
-            {v?.monthly_count !== 'onetime' && v?.monthly_count !== 'new_customer' && (
-              <button
-                onClick={() => { setShowRepeat(p => !p); setRepeatBase(schedule.scheduled_date) }}
-                className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
-              >
-                <RefreshCw size={10} />
-                반복 재설정
-              </button>
-            )}
           </div>
-
-          {/* 반복 재설정 패널 */}
-          {showRepeat && (
-            <div className="mt-2 bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
-              <p className="text-xs font-semibold text-purple-800">반복 일정 재설정</p>
-              <p className="text-xs text-purple-600">이 날짜부터 오늘 이후 일정을 모두 새로 생성합니다</p>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-600 shrink-0">새 기준일</label>
-                <input
-                  type="date"
-                  value={repeatBase}
-                  onChange={e => setRepeatBase(e.target.value)}
-                  className="text-xs border border-purple-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"
-                />
-              </div>
-              {v?.monthly_count === 'monthly_1' && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setRepeatMode('date')}
-                    className={`flex-1 text-xs py-1.5 rounded border font-medium ${repeatMode === 'date' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-300'}`}
-                  >
-                    매월 {repeatBase ? parseLocalDate(repeatBase).getDate() : '?'}일
-                  </button>
-                  <button
-                    onClick={() => setRepeatMode('weekday')}
-                    className={`flex-1 text-xs py-1.5 rounded border font-medium ${repeatMode === 'weekday' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-300'}`}
-                  >
-                    {repeatBase ? getWeekdayLabel(parseLocalDate(repeatBase)) : '요일 기준'}
-                  </button>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={saveRepeatReset}
-                  disabled={repeatSaving || !repeatBase}
-                  className="flex-1 bg-purple-600 text-white py-1.5 rounded text-xs font-semibold hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {repeatSaving ? '생성 중...' : '재설정'}
-                </button>
-                <button onClick={() => setShowRepeat(false)} className="px-3 py-1.5 rounded text-xs text-gray-500 hover:bg-gray-100">취소</button>
-              </div>
-            </div>
-          )}
-
         </div>
 
-        {/* 삭제 버튼 (모든 일정) */}
         <button
           onClick={() => {
             if (confirm('이 일정을 삭제하시겠습니까?')) onDelete()
