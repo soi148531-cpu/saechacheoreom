@@ -148,11 +148,11 @@ export default function ExpensesPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
-              <span className="text-xs text-red-600 font-medium">이달 지출</span>
-              <span className="text-sm font-bold text-red-900">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-right">
+              <p className="text-[10px] text-red-500 font-medium leading-none mb-0.5">이달 지출</p>
+              <p className="text-2xl font-bold text-red-700 leading-none tabular-nums">
                 {loading ? '...' : formatPrice(monthlyTotal)}
-              </span>
+              </p>
             </div>
             <button
               onClick={openAdd}
@@ -165,19 +165,21 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* 카테고리 요약 */}
+      {/* 카테고리 요약 — 엑셀 헤더 스타일 */}
       {categories.length > 0 && (
-        <div className="border-b border-gray-100 bg-gray-50 px-4 py-2">
-          <div className="max-w-2xl mx-auto flex gap-2 overflow-x-auto pb-0.5">
-            {categories.map(cat => {
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-0">
+          <div className="max-w-2xl mx-auto flex overflow-x-auto">
+            {categories.map((cat, idx) => {
               const amount = byCategory[cat.name] ?? 0
               return (
                 <div
                   key={cat.id}
-                  className="flex-shrink-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-center min-w-[72px]"
+                  className={`flex-shrink-0 px-4 py-2.5 text-right min-w-[90px] border-r border-amber-200 ${
+                    idx === 0 ? 'border-l border-amber-200' : ''
+                  }`}
                 >
-                  <p className="text-[10px] text-gray-500 font-medium truncate max-w-[80px]">{cat.name}</p>
-                  <p className={`text-xs font-bold mt-0.5 ${amount > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+                  <p className="text-[11px] text-amber-800 font-semibold truncate">{cat.name}</p>
+                  <p className={`text-sm font-bold tabular-nums mt-0.5 ${amount > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
                     {amount > 0 ? formatPrice(amount) : '-'}
                   </p>
                 </div>
@@ -236,7 +238,7 @@ export default function ExpensesPage() {
                   </div>
 
                   {/* 금액 */}
-                  <span className="font-bold text-gray-900 text-sm shrink-0">
+                  <span className="font-bold text-gray-900 text-base tabular-nums shrink-0">
                     {formatPrice(expense.amount)}
                   </span>
                 </button>
