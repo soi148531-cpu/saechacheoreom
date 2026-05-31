@@ -215,21 +215,24 @@ export default function ExpensesPage() {
 
                   {/* 내용 */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="flex items-center gap-1.5">
                       {expense.is_recurring && (
                         <Repeat2 size={13} className="text-blue-400 shrink-0" />
                       )}
-                      {expense.category ? (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                      <span className="text-sm font-medium text-gray-900 truncate">
+                        {expense.recurring?.name ?? expense.memo ?? ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {expense.category && (
+                        <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
                           {expense.category.name}
                         </span>
-                      ) : (
-                        <span className="text-xs text-gray-300">미분류</span>
+                      )}
+                      {expense.memo && expense.recurring?.name && (
+                        <span className="text-xs text-gray-400 truncate">{expense.memo}</span>
                       )}
                     </div>
-                    {expense.memo && (
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">{expense.memo}</p>
-                    )}
                   </div>
 
                   {/* 금액 */}

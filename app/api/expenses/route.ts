@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('expenses')
-    .select('*, category:expense_categories(id, name)')
+    .select('*, category:expense_categories(id, name), recurring:expense_recurring(id, name)')
     .eq('year_month', yearMonth)
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })

@@ -21,7 +21,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     .from('expenses')
     .update(update)
     .eq('id', params.id)
-    .select('*, category:expense_categories(id, name)')
+    .select('*, category:expense_categories(id, name), recurring:expense_recurring(id, name)')
     .single()
   if (error) return Response.json({ success: false, error: error.message }, { status: 500 })
   return Response.json({ success: true, data })

@@ -181,6 +181,7 @@ export interface Expense {
   recurring_id: string | null
   created_at: string
   category?: ExpenseCategory
+  recurring?: { id: string; name: string }
 }
 
 export interface MessageTemplate {
