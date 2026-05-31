@@ -186,13 +186,18 @@ export function generateSchedules(
     schedules = byInterval(vehicleId, startDate, 7, monthsAhead)
   }
 
-  return detectOvercount(schedules)
+  return detectOvercount(schedules, monthlyCount)
 }
 
 /**
- * 월3회 감지: 특정 월에 정확히 3회 생성된 경우 is_overcount = true
+ * 초과 횟수 감지: 월 플랜보다 실제 일정이 많은 경우 is_overcount = true
+ * monthly_1 → 월 2회 이상, monthly_2 → 월 3회 이상, monthly_4 → 월 5회 이상
  */
-export function detectOvercount(schedules: ScheduleItem[]): ScheduleItem[] {
+export function detectOvercount(
+  schedules: ScheduleItem[],
+  monthlyCount: 'monthly_1' | 'monthly_2' | 'monthly_4' = 'monthly_2'
+): ScheduleItem[] {
+  const threshold = monthlyCount === 'monthly_1' ? 1 : monthlyCount === 'monthly_4' ? 4 : 2
   const byMonth: Record<string, number> = {}
   schedules.forEach(s => {
     const ym = s.scheduled_date.slice(0, 7)
@@ -200,6 +205,6 @@ export function detectOvercount(schedules: ScheduleItem[]): ScheduleItem[] {
   })
   return schedules.map(s => ({
     ...s,
-    is_overcount: byMonth[s.scheduled_date.slice(0, 7)] === 3,
+    is_overcount: byMonth[s.scheduled_date.slice(0, 7)] > threshold,
   }))
 }

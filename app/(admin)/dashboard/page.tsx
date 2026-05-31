@@ -131,6 +131,23 @@ export default function CalendarPage() {
     return { exteriorCount: exterior, interiorCount: interior }
   }, [schedules])
 
+  // 차량별 이달 스케줄 횟수 → 플랜 초과 여부 실시간 계산 (DB의 is_overcount는 오래된 데이터일 수 있음)
+  const vehicleOvercountMap = useMemo(() => {
+    const countByVehicle: Record<string, number> = {}
+    schedules.forEach(s => {
+      countByVehicle[s.vehicle_id] = (countByVehicle[s.vehicle_id] ?? 0) + 1
+    })
+    const result: Record<string, { overcount: boolean; count: number }> = {}
+    schedules.forEach(s => {
+      if (result[s.vehicle_id]) return
+      const mc = s.vehicle?.monthly_count
+      const threshold = mc === 'monthly_1' ? 1 : mc === 'monthly_4' ? 4 : 2
+      const count = countByVehicle[s.vehicle_id] ?? 0
+      result[s.vehicle_id] = { overcount: count > threshold, count }
+    })
+    return result
+  }, [schedules])
+
   const searchHighlights = useMemo(() => {
     if (!searchQuery.trim()) return new Set<string>()
     const q = searchQuery.trim().toLowerCase()
@@ -428,7 +445,7 @@ export default function CalendarPage() {
               const isToday       = dateKey === todayKey
               const isSelected    = dateKey === selectedDate
               const isHighlight   = viewMode === 'calendar' && searchQuery.trim() && searchHighlights.has(dateKey)
-              const isOvercount   = daySchedules.some(s => s.is_overcount)
+              const isOvercount   = daySchedules.some(s => vehicleOvercountMap[s.vehicle_id]?.overcount)
               const interiorCount = daySchedules.filter(s => s.has_interior).length
               const dow           = new Date(year, month, day).getDay()
               const revenue       = revenueByDate[dateKey] ?? 0
@@ -641,6 +658,8 @@ export default function CalendarPage() {
                             onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
                             onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
                             done={selectedDateDoneSet.has(s.vehicle_id)}
+                            overcount={vehicleOvercountMap[s.vehicle_id]?.overcount}
+                            overcountCount={vehicleOvercountMap[s.vehicle_id]?.count}
                           />
                         </SortableRow>
                       ))}
@@ -656,6 +675,8 @@ export default function CalendarPage() {
                         onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
                         onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
                         done={selectedDateDoneSet.has(s.vehicle_id)}
+                        overcount={vehicleOvercountMap[s.vehicle_id]?.overcount}
+                        overcountCount={vehicleOvercountMap[s.vehicle_id]?.count}
                       />
                     ))}
                   </div>
@@ -687,9 +708,9 @@ export default function CalendarPage() {
                                   +실내 {formatPrice(interiorP)}
                                 </span>
                               )}
-                              {s.is_overcount && (
+                              {vehicleOvercountMap[s.vehicle_id]?.overcount && (
                                 <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
-                                  월3회
+                                  월{vehicleOvercountMap[s.vehicle_id].count}회
                                 </span>
                               )}
                             </div>
@@ -746,13 +767,15 @@ function SortableRow({ id, children }: { id: string; children: React.ReactNode }
 
 /* ─── 일정 행 ─── */
 function ScheduleRow({
-  schedule, onDelete, onDateChange, onInteriorToggle, done,
+  schedule, onDelete, onDateChange, onInteriorToggle, done, overcount, overcountCount,
 }: {
   schedule: ScheduleWithVehicle
   onDelete: () => void
   onDateChange: (newDate: string) => void
   onInteriorToggle: () => void
   done: boolean
+  overcount?: boolean
+  overcountCount?: number
 }) {
   const [editingDate, setEditingDate] = useState(false)
   const [newDate,     setNewDate]     = useState(schedule.scheduled_date)
@@ -782,10 +805,10 @@ function ScheduleRow({
             <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
               {v?.plate_number}
             </span>
-            {schedule.is_overcount && (
+            {overcount && (
               <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">
                 <AlertTriangle size={10} />
-                월3회
+                월{overcountCount}회
               </span>
             )}
             {v?.is_legacy && (
