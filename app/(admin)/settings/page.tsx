@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Save, AlertCircle, ChevronUp, ChevronDown, Plus, X, Edit2, Check, Trash2, Repeat2 } from 'lucide-react'
 import { usePricing, PriceTable } from '@/lib/hooks/usePricing'
 import { MessageSettingsPanel } from '@/components/MessageSettingsPanel'
@@ -816,6 +816,76 @@ interface RecurringItem {
 type RecurringForm = { name: string; category_id: string; amount: string; day_of_month: string }
 const EMPTY_RECURRING_FORM: RecurringForm = { name: '', category_id: '', amount: '', day_of_month: '1' }
 
+function RecurringFormPanel({
+  form, setForm, categories, onSave, onCancel, loading,
+}: {
+  form: RecurringForm
+  setForm: React.Dispatch<React.SetStateAction<RecurringForm>>
+  categories: { id: string; name: string }[]
+  onSave: () => void
+  onCancel: () => void
+  loading: boolean
+}) {
+  return (
+    <div className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
+      <input
+        type="text"
+        placeholder="이름 (예: 창고임대료)"
+        value={form.name}
+        onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+      />
+      <select
+        value={form.category_id}
+        onChange={e => setForm(prev => ({ ...prev, category_id: e.target.value }))}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+      >
+        <option value="">카테고리 없음</option>
+        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-500 mb-1 block">금액 (원)</label>
+          <input
+            type="number"
+            placeholder="300000"
+            value={form.amount}
+            onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            step={1000}
+            min={0}
+          />
+        </div>
+        <div className="w-28">
+          <label className="text-[10px] text-gray-500 mb-1 block">매월 몇 일</label>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              placeholder="1"
+              value={form.day_of_month}
+              onChange={e => setForm(prev => ({ ...prev, day_of_month: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              min={1}
+              max={31}
+            />
+            <span className="text-xs text-gray-500 shrink-0">일</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onSave} disabled={loading}
+          className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+          저장
+        </button>
+        <button onClick={onCancel}
+          className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-300">
+          취소
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function RecurringSettings() {
   const [items, setItems] = useState<RecurringItem[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
@@ -895,65 +965,6 @@ function RecurringSettings() {
     load()
   }
 
-  const FormPanel = ({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) => (
-    <div className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
-      <input
-        type="text"
-        placeholder="이름 (예: 창고임대료)"
-        value={form.name}
-        onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-      />
-      <select
-        value={form.category_id}
-        onChange={e => setForm(prev => ({ ...prev, category_id: e.target.value }))}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-      >
-        <option value="">카테고리 없음</option>
-        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <label className="text-[10px] text-gray-500 mb-1 block">금액 (원)</label>
-          <input
-            type="number"
-            placeholder="300000"
-            value={form.amount}
-            onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            step={1000}
-            min={0}
-          />
-        </div>
-        <div className="w-28">
-          <label className="text-[10px] text-gray-500 mb-1 block">매월 몇 일</label>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              placeholder="1"
-              value={form.day_of_month}
-              onChange={e => setForm(prev => ({ ...prev, day_of_month: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              min={1}
-              max={31}
-            />
-            <span className="text-xs text-gray-500 shrink-0">일</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={onSave} disabled={loading}
-          className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-          저장
-        </button>
-        <button onClick={onCancel}
-          className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-300">
-          취소
-        </button>
-      </div>
-    </div>
-  )
-
   return (
     <div className="space-y-3">
       {error && (
@@ -974,7 +985,8 @@ function RecurringSettings() {
       </div>
 
       {showAdd && (
-        <FormPanel
+        <RecurringFormPanel
+          form={form} setForm={setForm} categories={categories} loading={loading}
           onSave={handleAdd}
           onCancel={() => { setShowAdd(false); setForm(EMPTY_RECURRING_FORM) }}
         />
@@ -994,7 +1006,8 @@ function RecurringSettings() {
               }`}
             >
               {editingId === item.id ? (
-                <FormPanel
+                <RecurringFormPanel
+                  form={form} setForm={setForm} categories={categories} loading={loading}
                   onSave={() => handleUpdate(item.id)}
                   onCancel={() => { setEditingId(null); setForm(EMPTY_RECURRING_FORM) }}
                 />
