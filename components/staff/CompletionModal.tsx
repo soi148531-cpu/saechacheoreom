@@ -21,6 +21,7 @@ interface CompletionModalProps {
   scheduled_date: string
   schedule_id: string
   isInteriorOnly?: boolean
+  hasInterior?: boolean
   onSuccess?: () => void
 }
 
@@ -40,6 +41,7 @@ export default function CompletionModal({
   scheduled_date,
   schedule_id,
   isInteriorOnly = false,
+  hasInterior = false,
   onSuccess,
 }: CompletionModalProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -58,7 +60,7 @@ export default function CompletionModal({
   useEffect(() => {
     if (!isOpen) return
     setError('')
-    setWorkType(isInteriorOnly ? 'interior_only' : 'exterior')
+    setWorkType(isInteriorOnly ? 'interior_only' : hasInterior ? 'both' : 'exterior')
     setInteriorOnlyPrice(20000)
     setCustomLabel('실내청소')
     const fetchWorkers = async () => {

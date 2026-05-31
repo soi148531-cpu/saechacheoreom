@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, memo } from 'react'
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, Home, Check, X, Sofa, CalendarDays, Copy, CheckCheck } from 'lucide-react'
 import Link from 'next/link'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
-import { usePricing } from '@/lib/hooks/usePricing'
+import { usePricing, type PriceTable } from '@/lib/hooks/usePricing'
 import { getTodayKST } from '@/lib/utils/timezone'
 import CompletionModal from '@/components/staff/CompletionModal'
 import type { Vehicle, Schedule } from '@/types'
@@ -37,13 +37,19 @@ interface TaskItem {
 }
 
 export default function StaffPage() {
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
   const { priceTable } = usePricing()
 
   const [tasks,        setTasks]        = useState<TaskItem[]>([])
   const [loading,      setLoading]      = useState(true)
-  const [date,         setDate]         = useState<string | null>(null)
-  const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(null)
+  const [date,         setDate]         = useState<string | null>(() => getTodayKST())
+  const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(() => {
+    try {
+      const cached = sessionStorage.getItem('schemaSupport')
+      return cached ? (JSON.parse(cached) as SchemaSupport) : null
+    } catch { return null }
+  })
   const [savingKey,    setSavingKey]    = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
   const [skippedOpen,  setSkippedOpen]  = useState(false)
@@ -55,19 +61,6 @@ export default function StaffPage() {
   const [completionModalOpen, setCompletionModalOpen] = useState(false)
   const [selectedTaskIdx,     setSelectedTaskIdx]     = useState<number | null>(null)
 
-  useEffect(() => {
-    const fetchServerTime = async () => {
-      try {
-        const res = await fetch('/api/time/now')
-        const result = await res.json()
-        setDate(result.success ? result.today : getTodayKST())
-      } catch {
-        setDate(getTodayKST())
-      }
-    }
-    fetchServerTime()
-  }, [])
-
   const detectSchemaSupport = useCallback(async () => {
     const [{ error: e1 }, { error: e2 }, { error: e3 }] = await Promise.all([
       supabase.from('schedules').select('id, admin_memo').limit(1),
@@ -75,6 +68,7 @@ export default function StaffPage() {
       supabase.from('wash_records').select('id, completed_by').limit(1),
     ])
     const support = { scheduleAdminMemo: !e1, washAdminNote: !e2, washCompletedBy: !e3 }
+    try { sessionStorage.setItem('schemaSupport', JSON.stringify(support)) } catch { /* ignore */ }
     setSchemaSupport(prev =>
       prev?.scheduleAdminMemo === support.scheduleAdminMemo &&
       prev?.washAdminNote === support.washAdminNote &&
@@ -393,6 +387,7 @@ export default function StaffPage() {
                   <TaskCard
                     key={task.schedule.id}
                     task={task}
+                    priceTable={priceTable}
                     isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
                     canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
                     monthlyDates={vSchedules}
@@ -479,6 +474,7 @@ export default function StaffPage() {
           scheduled_date={tasks[selectedTaskIdx].schedule.scheduled_date}
           schedule_id={tasks[selectedTaskIdx].schedule.id}
           isInteriorOnly={(tasks[selectedTaskIdx].schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only'}
+          hasInterior={!!tasks[selectedTaskIdx].schedule.has_interior}
           onSuccess={() => {
             setCompletionModalOpen(false)
             setSelectedTaskIdx(null)
@@ -491,8 +487,8 @@ export default function StaffPage() {
 }
 
 /* ─── 작업 카드 ─── */
-function TaskCard({
-  task, onToggleWorker, onCancel,
+const TaskCard = memo(function TaskCard({
+  task, priceTable, onToggleWorker, onCancel,
   onSelfWorkToggle, onSkip, onInteriorToggle,
   onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
@@ -500,6 +496,7 @@ function TaskCard({
   monthlyDates, monthlyWashSet,
 }: {
   task: TaskItem
+  priceTable: PriceTable
   onToggleWorker: () => void
   onCancel: () => void
   onSelfWorkToggle: () => void
@@ -517,7 +514,6 @@ function TaskCard({
   monthlyDates: string[]
   monthlyWashSet: Set<string>
 }) {
-  const { priceTable } = usePricing()
   const v = task.schedule.vehicle
   const customer = v.customer
 
@@ -718,4 +714,4 @@ function TaskCard({
       )}
     </div>
   )
-}
+})
