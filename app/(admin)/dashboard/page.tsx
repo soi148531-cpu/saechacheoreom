@@ -309,6 +309,19 @@ export default function CalendarPage() {
     [selectedSchedules, priceTable]
   )
 
+  const OUTDOOR_WORKER_COST = 8000
+  const INTERIOR_WORKER_COST = 10000
+
+  const monthlyNetProfit = useMemo(() => {
+    const interiorCnt = schedules.filter(s => s.has_interior).length
+    return monthlyTotal - schedules.length * OUTDOOR_WORKER_COST - interiorCnt * INTERIOR_WORKER_COST
+  }, [schedules, monthlyTotal])
+
+  const selectedDayNetProfit = useMemo(() => {
+    const interiorCnt = selectedSchedules.filter(s => s.has_interior).length
+    return selectedDayTotal - selectedSchedules.length * OUTDOOR_WORKER_COST - interiorCnt * INTERIOR_WORKER_COST
+  }, [selectedSchedules, selectedDayTotal])
+
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
   return (
@@ -392,12 +405,18 @@ export default function CalendarPage() {
             </button>
           </div>
 
-          {/* 예상매출 모드일 때 이달 총액 표시 */}
+          {/* 예상매출 모드일 때 이달 총액 + 순수익 표시 */}
           {viewMode === 'revenue' && !loading && (
-            <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
-              <TrendingUp size={13} className="text-green-600" />
-              <span className="text-xs text-green-600 font-medium">이달 예상</span>
-              <span className="text-sm font-bold text-green-800">{formatPrice(monthlyTotal)}</span>
+            <div className="flex flex-col items-end gap-0.5 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
+              <div className="flex items-center gap-1">
+                <TrendingUp size={13} className="text-green-600" />
+                <span className="text-xs text-green-600 font-medium">이달 예상</span>
+                <span className="text-sm font-bold text-green-800">{formatPrice(monthlyTotal)}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-blue-500 font-medium">순수익</span>
+                <span className="text-sm font-bold text-blue-700">{formatPrice(monthlyNetProfit)}</span>
+              </div>
             </div>
           )}
 
@@ -529,8 +548,13 @@ export default function CalendarPage() {
               ) : (
                 <>
                   <div className="text-left text-gray-700">예정 {schedules.length}대</div>
-                  <div className="text-center text-green-600 font-semibold">예상 총매출</div>
-                  <div className="text-right font-bold text-green-700">{formatPrice(monthlyTotal)}</div>
+                  <div className="text-center">
+                    <div className="text-green-600 font-semibold">예상 {formatPrice(monthlyTotal)}</div>
+                    <div className="text-blue-500 font-semibold">순수익 {formatPrice(monthlyNetProfit)}</div>
+                  </div>
+                  <div className="text-right text-gray-400 text-[10px] leading-tight">
+                    실외×{schedules.length}<br />실내×{schedules.filter(s => s.has_interior).length}
+                  </div>
                 </>
               )}
             </div>
@@ -594,9 +618,13 @@ export default function CalendarPage() {
                   <p className="text-[11px] text-gray-400 mt-0.5">차량별 단가 기준</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-right">
+                  <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-right">
                     <p className="text-[10px] text-green-600 font-semibold leading-none mb-1">예상 매출</p>
-                    <p className="text-xl font-bold text-green-700 leading-none">{formatPrice(selectedDayTotal)}</p>
+                    <p className="text-lg font-bold text-green-700 leading-none">{formatPrice(selectedDayTotal)}</p>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-right">
+                    <p className="text-[10px] text-blue-500 font-semibold leading-none mb-1">순수익</p>
+                    <p className="text-lg font-bold text-blue-700 leading-none">{formatPrice(selectedDayNetProfit)}</p>
                   </div>
                   <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600 p-1">
                     <X size={18} />
