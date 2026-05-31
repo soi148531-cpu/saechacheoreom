@@ -249,28 +249,25 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* 추가/수정 바텀시트 */}
+      {/* 추가/수정 모달 — 모바일: 바텀시트 / PC: 가운데 모달 */}
       {showSheet && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center md:p-4">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowSheet(false)}
           />
-          <div className="relative bg-white rounded-t-2xl shadow-2xl p-5 pb-8 max-h-[85vh] overflow-y-auto">
-            {/* 시트 헤더 */}
+          <div className="relative bg-white rounded-t-2xl md:rounded-2xl shadow-2xl p-5 pb-8 md:pb-5 w-full md:w-[460px] max-h-[90vh] overflow-y-auto">
+
+            {/* 헤더 */}
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-bold text-gray-900 text-base">
                 {editingId ? '지출 수정' : '지출 추가'}
               </h3>
-              <button
-                onClick={() => setShowSheet(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
+              <button onClick={() => setShowSheet(false)} className="text-gray-400 hover:text-gray-600 p-1">
                 <X size={20} />
               </button>
             </div>
 
-            {/* 폼 */}
             <div className="space-y-4">
               {/* 날짜 */}
               <div>
@@ -283,19 +280,34 @@ export default function ExpensesPage() {
                 />
               </div>
 
-              {/* 카테고리 */}
+              {/* 카테고리 — 버튼 칩 */}
               <div>
-                <label className="text-xs text-gray-500 mb-1.5 block font-medium">카테고리 (선택)</label>
-                <select
-                  value={form.category_id}
-                  onChange={e => setForm(prev => ({ ...prev, category_id: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">카테고리 없음</option>
+                <label className="text-xs text-gray-500 mb-2 block font-medium">카테고리</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setForm(prev => ({ ...prev, category_id: '' }))}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                      !form.category_id
+                        ? 'bg-gray-800 text-white border-gray-800'
+                        : 'border-gray-300 text-gray-500 hover:border-gray-400'
+                    }`}
+                  >
+                    없음
+                  </button>
                   {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    <button
+                      key={cat.id}
+                      onClick={() => setForm(prev => ({ ...prev, category_id: cat.id }))}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                        form.category_id === cat.id
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 text-gray-600 hover:border-blue-300 hover:text-blue-600'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               {/* 금액 */}
@@ -303,16 +315,39 @@ export default function ExpensesPage() {
                 <label className="text-xs text-gray-500 mb-1.5 block font-medium">금액</label>
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
-                    value={form.amount}
-                    onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="0"
+                    type="text"
                     inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={form.amount}
+                    onChange={e => {
+                      const v = e.target.value.replace(/[^0-9]/g, '')
+                      setForm(prev => ({ ...prev, amount: v }))
+                    }}
+                    placeholder="0"
                     className="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
-                    step={1000}
-                    min={0}
                   />
                   <span className="text-sm text-gray-500 shrink-0">원</span>
+                </div>
+                {/* 빠른 금액 */}
+                <div className="flex gap-1.5 mt-2">
+                  {[10000, 30000, 50000, 100000].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => {
+                        const current = parseInt(form.amount) || 0
+                        setForm(prev => ({ ...prev, amount: String(current + amt) }))
+                      }}
+                      className="flex-1 text-xs py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                    >
+                      +{amt / 10000}만
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setForm(prev => ({ ...prev, amount: '' }))}
+                    className="px-2.5 text-xs py-1.5 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-colors"
+                  >
+                    초기화
+                  </button>
                 </div>
               </div>
 
