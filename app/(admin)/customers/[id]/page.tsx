@@ -21,6 +21,7 @@ const STATUS_LABELS: Record<VehicleStatus, string> = {
   paused:       '정지',
   irregular:    '비정기',
   unregistered: '미등록',
+  pending:      '등록대기',
 }
 
 const STATUS_COLORS: Record<VehicleStatus, string> = {
@@ -28,6 +29,7 @@ const STATUS_COLORS: Record<VehicleStatus, string> = {
   paused:       'bg-yellow-100 text-yellow-700',
   irregular:    'bg-blue-100 text-blue-700',
   unregistered: 'bg-gray-100 text-gray-500',
+  pending:      'bg-orange-100 text-orange-700',
 }
 
 export default function CustomerDetailPage() {
@@ -395,7 +397,19 @@ export default function CustomerDetailPage() {
                     </div>
                     <div>
                       <label className="text-xs text-gray-500 block mb-1">월횟수</label>
-                      <select value={editVCount} onChange={e => setEditVCount(e.target.value as MonthlyCount)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                      <select
+                        value={editVCount}
+                        onChange={e => {
+                          const newCount = e.target.value as MonthlyCount
+                          setEditVCount(newCount)
+                          if (newCount === 'new_customer' && editVStatus !== 'irregular' && editVStatus !== 'unregistered') {
+                            setEditVStatus('pending')
+                          } else if (newCount !== 'new_customer' && editVStatus === 'pending') {
+                            setEditVStatus('active')
+                          }
+                        }}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
                         {(Object.entries(MONTHLY_COUNT_LABELS) as [MonthlyCount, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
                       </select>
                     </div>
@@ -428,7 +442,17 @@ export default function CustomerDetailPage() {
                     <div>
                       <label className="text-xs text-gray-500 block mb-1">차량 상태</label>
                       <select value={editVStatus} onChange={e => setEditVStatus(e.target.value as VehicleStatus)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                        {(Object.entries(STATUS_LABELS) as [VehicleStatus, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                        {editVCount === 'new_customer' ? (
+                          <>
+                            <option value="pending">등록대기</option>
+                            <option value="irregular">비정기</option>
+                            <option value="unregistered">미등록</option>
+                          </>
+                        ) : (
+                          (Object.entries(STATUS_LABELS) as [VehicleStatus, string][])
+                            .filter(([k]) => k !== 'pending')
+                            .map(([k, label]) => <option key={k} value={k}>{label}</option>)
+                        )}
                       </select>
                     </div>
                   </div>

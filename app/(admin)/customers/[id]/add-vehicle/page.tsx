@@ -113,7 +113,9 @@ export default function AddVehiclePage() {
     setError('')
 
     try {
-      const status = vehicle.monthly_count === 'onetime' ? 'irregular' : 'active'
+      const status = vehicle.monthly_count === 'onetime' ? 'irregular'
+        : vehicle.monthly_count === 'new_customer' ? 'pending'
+        : 'active'
 
       const { data: savedVehicle, error: vErr } = await db()
         .from('vehicles')
@@ -136,8 +138,8 @@ export default function AddVehiclePage() {
 
       if (vErr) throw vErr
 
-      // 일정 자동 생성 (비정기 제외)
-      if (vehicle.monthly_count !== 'onetime') {
+      // 일정 자동 생성 (비정기·신규차량 제외)
+      if (vehicle.monthly_count !== 'onetime' && vehicle.monthly_count !== 'new_customer') {
         const baseDate = parseLocalDate(vehicle.base_date)
         const schedules = generateSchedules(
           savedVehicle.id,

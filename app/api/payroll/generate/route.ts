@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     // ⚠️ completed_by가 NULL인 비정상 기록은 제외
     const { data: washRecords, error: washError } = await supabase
       .from('wash_records')
-      .select('id, completed_by, worker_id, service_type, wash_date, vehicle_id, schedule_id, created_at')
+      .select('id, completed_by, worker_id, service_type, wash_date, vehicle_id, created_at')
       .gte('wash_date', startDate)
       .lte('wash_date', endDate)
       .not('completed_by', 'is', null)  // completed_by가 NULL인 비정상 기록 제외
@@ -93,11 +93,7 @@ export async function POST(request: NextRequest) {
     )
     
     sorted.forEach((record: any) => {
-      // schedule_id가 있으면 (스케줄별 독립 기록) schedule_id+worker로 중복 제거
-      // 없으면 날짜+차량+worker+service_type으로 중복 제거 (실외/실내만이 같은 차량에 공존 가능)
-      const key = record.schedule_id
-        ? `sched:${record.schedule_id}|${record.completed_by}`
-        : `${record.wash_date}|${record.vehicle_id}|${record.completed_by}|${record.service_type ?? ''}`
+      const key = `${record.wash_date}|${record.vehicle_id}|${record.completed_by}`
       if (!seen.has(key)) {
         seen.add(key)
         uniqueRecords.push(record)
@@ -115,35 +111,26 @@ export async function POST(request: NextRequest) {
           workerCount[record.completed_by] = { total: 0, outdoor: 0, indoor: 0, worker_id: record.worker_id }
         }
         
+        // 세차 1건 = 실외 1건 (항상)
         workerCount[record.completed_by].total += 1
-        if (record.service_type === 'interior_only') {
-          // 실내 전용: 실내만 카운트 (실외 세차 없음)
+        workerCount[record.completed_by].outdoor += 1
+        // 실내청소가 포함된 경우 실내도 추가
+        if (record.service_type && record.service_type.includes('interior')) {
           workerCount[record.completed_by].indoor += 1
-        } else {
-          // regular, interior: 실외 포함
-          workerCount[record.completed_by].outdoor += 1
-          if (record.service_type === 'interior') {
-            workerCount[record.completed_by].indoor += 1
-          }
         }
       }
     })
 
-    // 2-2. workers 테이블에서 워커 정보 조회 (이름 -> UUID 매핑 + 개인 단가)
+    // 2-2. workers 테이블에서 워커 정보 조회 (이름 -> UUID 매핑)
     const { data: workers, error: workersError } = await supabase
       .from('workers')
-      .select('id, name, outdoor_rate, indoor_rate')
+      .select('id, name')
 
     if (workersError) throw workersError
 
-    // 개인 단가가 있으면 사용, 없거나 0이면 글로벌 단가(rates)로 폴백
-    const workerMap: Record<string, { id: string; outdoor: number; indoor: number }> = {}
+    const workerMap: Record<string, string> = {}
     workers?.forEach((w: any) => {
-      workerMap[w.name] = {
-        id: w.id,
-        outdoor: (typeof w.outdoor_rate === 'number' && w.outdoor_rate > 0) ? w.outdoor_rate : rates.outdoor,
-        indoor: (typeof w.indoor_rate === 'number' && w.indoor_rate > 0) ? w.indoor_rate : rates.indoor,
-      }
+      workerMap[w.name] = w.id
     })
 
     // 3. 기존 정산 레코드 확인
@@ -158,19 +145,15 @@ export async function POST(request: NextRequest) {
     const payrollsToCreate: any[] = []
     
     Object.entries(workerCount).forEach(([workerName, counts]) => {
-      const workerInfo = workerMap[workerName]
-      if (workerInfo) {
-        // 개인 단가 사용 (없으면 글로벌 단가로 이미 폴백됨)
-        const workerOutdoor = workerInfo.outdoor
-        const workerIndoor = workerInfo.indoor
-
-        // 계산: (실외 × 개인외부료금) + (실내 × 개인내부료금)
-        const outdoorAmount = counts.outdoor * workerOutdoor
-        const indoorAmount = counts.indoor * workerIndoor
+      const workerId = workerMap[workerName]
+      if (workerId) {
+        // 계산: (실외 × 외부료금) + (실내 × 내부료금)
+        const outdoorAmount = counts.outdoor * rates.outdoor
+        const indoorAmount = counts.indoor * rates.indoor
         const baseAmount = outdoorAmount + indoorAmount
-
+        
         payrollsToCreate.push({
-          worker_id: workerInfo.id,
+          worker_id: workerId,
           year_month,
           total_washes: counts.total,  // 실제 세차 차량 대수 (실내/실외 중복 아님)
           total_amount: baseAmount,  // 기본 정산액 (실외 + 실내)
@@ -178,7 +161,7 @@ export async function POST(request: NextRequest) {
           paid_amount: baseAmount,  // 지급 예정액
           paid_at: null,
           created_at: getNowKSTTimestamp(),  // ✓ KST 기준 타임스탬프
-          memo: `(실외 ${counts.outdoor}건 × ₩${workerOutdoor.toLocaleString()} + 실내 ${counts.indoor}건 × ₩${workerIndoor.toLocaleString()})`
+          memo: `(실외 ${counts.outdoor}건 × ₩${rates.outdoor.toLocaleString()} + 실내 ${counts.indoor}건 × ₩${rates.indoor.toLocaleString()})`
         })
       }
     })

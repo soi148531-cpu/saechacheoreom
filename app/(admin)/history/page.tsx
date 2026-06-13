@@ -32,6 +32,19 @@ const PAYMENT_LABELS: Record<string, string> = {
   cash_receipt: '현금영수증',
 }
 
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
+
 type Tab = 'history' | 'tax'
 
 export default function HistoryPage() {
@@ -240,7 +253,7 @@ export default function HistoryPage() {
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5">
                 <div className="flex items-center gap-2 mb-1">
                   <User size={15} className="text-blue-500" />
-                  <span className="text-lg font-bold text-gray-900">{result.customer.name}</span>
+                  <span className="text-lg font-bold text-gray-900"><Highlight text={result.customer.name} query={query} /></span>
                   <span className="text-sm text-gray-500">{result.customer.apartment}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-600">
@@ -265,9 +278,9 @@ export default function HistoryPage() {
                     <div key={vehicle.id} className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-gray-900">{vehicle.car_name}</span>
+                          <span className="font-semibold text-gray-900"><Highlight text={vehicle.car_name} query={query} /></span>
                           <span className="font-mono text-xs bg-white border border-gray-200 px-2 py-0.5 rounded text-blue-700">
-                            {vehicle.plate_number}
+                            <Highlight text={vehicle.plate_number} query={query} />
                           </span>
                           {vehicle.customer?.unit_number && (
                             <span className="text-xs text-gray-500">{vehicle.customer.unit_number}</span>

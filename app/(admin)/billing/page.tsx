@@ -65,19 +65,25 @@ function calculateBillingStats(customers: CustomerBilling[]): BillingStats {
   let paidCount = 0
   let totalRecords = 0
 
+  let unpaidAmount = 0
+
   customers.forEach(cb => {
     cb.vehicles.forEach(vb => {
       totalBillingAmount += vb.totalAmount
       totalPaidAmount += vb.paidAmount
       totalRecords += vb.records.length
 
-      if (vb.paymentStatus === 'paid') paidCount++
-      else if (vb.paymentStatus === 'partial') partialCount++
-      else unpaidCount++
+      if (vb.paymentStatus === 'paid') {
+        paidCount++
+      } else if (vb.paymentStatus === 'partial') {
+        partialCount++
+        unpaidAmount += vb.totalAmount - vb.paidAmount
+      } else {
+        unpaidCount++
+        unpaidAmount += vb.totalAmount
+      }
     })
   })
-
-  const unpaidAmount = totalBillingAmount - totalPaidAmount
   const paymentRate = totalBillingAmount > 0 ? (totalPaidAmount / totalBillingAmount) * 100 : 0
 
   return {

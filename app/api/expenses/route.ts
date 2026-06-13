@@ -11,18 +11,21 @@ export async function GET(request: NextRequest) {
   const yearMonth = searchParams.get('year_month')
   if (!yearMonth) return Response.json({ success: false, error: 'year_month 파라미터가 필요합니다' }, { status: 400 })
 
-  // 이번달이면 고정지출 자동 생성
+  // 과거/현재 달이면 고정지출 자동 생성 (미래 달은 제외)
   const today = new Date()
   const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  if (yearMonth === currentYearMonth) {
-    const todayDay = today.getDate()
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  if (yearMonth <= currentYearMonth) {
+    const isPast = yearMonth < currentYearMonth
+    const [reqYear, reqMonth] = yearMonth.split('-').map(Number)
+    const lastDayOfMonth = new Date(reqYear, reqMonth, 0).getDate()
+    // 과거달은 해당 달 전체, 이번달은 오늘까지
+    const dayLimit = isPast ? lastDayOfMonth : today.getDate()
 
     const { data: recurringItems } = await supabase
       .from('expense_recurring')
       .select('*')
       .eq('is_active', true)
-      .lte('day_of_month', todayDay)
+      .lte('day_of_month', dayLimit)
 
     if (recurringItems && recurringItems.length > 0) {
       const { data: existing } = await supabase
