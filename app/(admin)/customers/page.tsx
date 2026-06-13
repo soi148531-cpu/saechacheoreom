@@ -11,6 +11,7 @@ import type { Customer, VehicleStatus } from '@/types'
 const TABS: { key: VehicleStatus | 'all'; label: string }[] = [
   { key: 'all',          label: '전체' },
   { key: 'active',       label: '정기' },
+  { key: 'pending',      label: '등록대기' },
   { key: 'paused',       label: '정지' },
   { key: 'irregular',    label: '비정기' },
   { key: 'unregistered', label: '미등록' },
@@ -85,6 +86,7 @@ export default function CustomersPage() {
   const counts = {
     all:          customers.length,
     active:       allVehicles.filter(v => v.status === 'active').length,
+    pending:      allVehicles.filter(v => v.status === 'pending').length,
     paused:       allVehicles.filter(v => v.status === 'paused').length,
     irregular:    allVehicles.filter(v => v.status === 'irregular').length,
     unregistered: customers.filter(c => !c.vehicles || c.vehicles.length === 0 || c.vehicles.some(v => v.status === 'unregistered')).length,
@@ -94,7 +96,7 @@ export default function CustomersPage() {
   const vehicleWithCustomer = (vId: string) =>
     customers.find(c => c.vehicles?.some(v => v.id === vId))
 
-  const newVehicles  = allVehicles.filter(v => v.start_date?.startsWith(viewMonth))
+  const newVehicles  = allVehicles.filter(v => v.start_date?.startsWith(viewMonth) && v.status !== 'pending' && v.status !== 'unregistered')
   const exitVehicles = allVehicles.filter(v => v.end_date?.startsWith(viewMonth))
 
   // 월 이동
@@ -298,10 +300,16 @@ export default function CustomersPage() {
                         <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono">
                           {v.plate_number}
                         </span>
-                        <span className="text-xs text-blue-600">
-                          {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
-                        </span>
-                        {v.unit_price && (
+                        {v.status === 'pending' ? (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">
+                            등록대기
+                          </span>
+                        ) : (
+                          <span className="text-xs text-blue-600">
+                            {CAR_GRADE_LABELS[v.car_grade]} · {MONTHLY_COUNT_LABELS[v.monthly_count]}
+                          </span>
+                        )}
+                        {v.unit_price && v.status !== 'pending' && (
                           <span className="text-xs text-gray-500">
                             {formatPrice(v.unit_price)}/회
                           </span>
