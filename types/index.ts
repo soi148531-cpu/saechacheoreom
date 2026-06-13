@@ -10,7 +10,7 @@ export type CarGrade =
 
 export type MonthlyCount = 'monthly_1' | 'monthly_2' | 'monthly_4' | 'onetime' | 'new_customer'
 
-export type VehicleStatus = 'active' | 'paused' | 'irregular' | 'unregistered'
+export type VehicleStatus = 'active' | 'paused' | 'irregular' | 'unregistered' | 'pending'
 
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 
