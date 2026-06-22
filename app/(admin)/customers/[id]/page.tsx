@@ -50,6 +50,7 @@ export default function CustomerDetailPage() {
   const [editSaving,  setEditSaving]  = useState(false)
   // 차량 편집 모드
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
+  const [editVTab,         setEditVTab]         = useState<'regular' | 'interior_only'>('regular')
   const [editVCarName,     setEditVCarName]     = useState('')
   const [editVPlate,       setEditVPlate]       = useState('')
   const [editVGrade,       setEditVGrade]       = useState<CarGrade>('mid_sedan')
@@ -139,12 +140,15 @@ export default function CustomerDetailPage() {
   }
 
   function startEditVehicle(v: Vehicle) {
+    const repeatMode = (v as unknown as { repeat_mode?: string }).repeat_mode
+    const isInteriorOnly = repeatMode === 'interior_only'
     setEditingVehicleId(v.id)
+    setEditVTab(isInteriorOnly ? 'interior_only' : 'regular')
     setEditVCarName(v.car_name)
     setEditVPlate(v.plate_number)
     setEditVGrade(v.car_grade)
     setEditVCount(v.monthly_count)
-    setEditVRepeatMode(((v as unknown as { repeat_mode?: string }).repeat_mode as RepeatMode) ?? 'date')
+    setEditVRepeatMode(isInteriorOnly ? 'date' : ((repeatMode as RepeatMode) ?? 'date'))
     setEditVUnitPrice(v.unit_price?.toString() ?? '')
     setEditVCustomPrice(v.custom_price?.toString() ?? '')
     setEditVEndDate(v.end_date ?? '')
@@ -155,26 +159,43 @@ export default function CustomerDetailPage() {
   async function saveVehicle() {
     if (!editingVehicleId) return
     setVehicleSaving(true)
-    const unitPrice = editVUnitPrice
-      ? Number(editVUnitPrice)
-      : editVCount !== 'onetime'
-        ? getMonthlyPrice(editVGrade, editVCount) / (editVCount === 'monthly_1' ? 1 : editVCount === 'monthly_2' ? 2 : 4)
-        : 0
-    const monthlyPrice = editVCount !== 'onetime' ? getMonthlyPrice(editVGrade, editVCount) : null
-    const customPrice = editVCustomPrice ? Number(editVCustomPrice) : null
-    await db().from('vehicles').update({
-      car_name:      editVCarName.trim(),
-      plate_number:  editVPlate.trim().replace(/\s/g, ''),
-      car_grade:     editVGrade,
-      monthly_count: editVCount,
-      repeat_mode:   editVRepeatMode,
-      unit_price:    unitPrice,
-      monthly_price: monthlyPrice,
-      custom_price:  customPrice,
-      end_date:        editVEndDate || null,
-      status:          editVStatus,
-      interior_count:  editVInteriorCount,
-    }).eq('id', editingVehicleId)
+
+    if (editVTab === 'interior_only') {
+      // 실내만 차량: 정기(active)로 저장, repeat_mode = 'interior_only' 마커
+      await db().from('vehicles').update({
+        car_name:      editVCarName.trim(),
+        plate_number:  editVPlate.trim().replace(/\s/g, ''),
+        monthly_count: editVCount !== 'onetime' && editVCount !== 'new_customer' ? editVCount : 'monthly_1',
+        repeat_mode:   'interior_only',
+        unit_price:    editVUnitPrice ? Number(editVUnitPrice) : null,
+        monthly_price: null,
+        custom_price:  null,
+        status:        'active',
+        interior_count: 0,
+        end_date:      editVEndDate || null,
+      }).eq('id', editingVehicleId)
+    } else {
+      const unitPrice = editVUnitPrice
+        ? Number(editVUnitPrice)
+        : editVCount !== 'onetime'
+          ? getMonthlyPrice(editVGrade, editVCount) / (editVCount === 'monthly_1' ? 1 : editVCount === 'monthly_2' ? 2 : 4)
+          : 0
+      const monthlyPrice = editVCount !== 'onetime' ? getMonthlyPrice(editVGrade, editVCount) : null
+      const customPrice = editVCustomPrice ? Number(editVCustomPrice) : null
+      await db().from('vehicles').update({
+        car_name:      editVCarName.trim(),
+        plate_number:  editVPlate.trim().replace(/\s/g, ''),
+        car_grade:     editVGrade,
+        monthly_count: editVCount,
+        repeat_mode:   editVRepeatMode,
+        unit_price:    unitPrice,
+        monthly_price: monthlyPrice,
+        custom_price:  customPrice,
+        end_date:        editVEndDate || null,
+        status:          editVStatus,
+        interior_count:  editVInteriorCount,
+      }).eq('id', editingVehicleId)
+    }
     setVehicleSaving(false)
     setEditingVehicleId(null)
     fetchCustomer()
@@ -202,11 +223,13 @@ export default function CustomerDetailPage() {
         26
       ).filter(s => s.scheduled_date > lastDateStr)
       if (newSchedules.length > 0) {
+        const repeatMode = (vehicle as unknown as { repeat_mode?: string }).repeat_mode
+        const isInteriorOnly = repeatMode === 'interior_only'
         await db().from('schedules').insert(newSchedules.map(s => ({
           vehicle_id:     s.vehicle_id,
           scheduled_date: s.scheduled_date,
           is_overcount:   s.is_overcount ?? false,
-          schedule_type:  'regular',
+          schedule_type:  isInteriorOnly ? 'interior_only' : 'regular',
         })))
       }
       alert(`✅ ${newSchedules.length}개 일정 추가 (약 2년치)`)
@@ -380,84 +403,152 @@ export default function CustomerDetailPage() {
                       <X size={16} />
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="col-span-2">
-                      <label className="text-xs text-gray-500 block mb-1">차량명</label>
-                      <input value={editVCarName} onChange={e => setEditVCarName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">차량번호</label>
-                      <input value={editVPlate} onChange={e => setEditVPlate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">차량등급</label>
-                      <select value={editVGrade} onChange={e => setEditVGrade(e.target.value as CarGrade)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                        {(Object.entries(CAR_GRADE_LABELS) as [CarGrade, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">월횟수</label>
-                      <select
-                        value={editVCount}
-                        onChange={e => {
-                          const newCount = e.target.value as MonthlyCount
-                          setEditVCount(newCount)
-                          if (newCount === 'new_customer' && editVStatus !== 'irregular' && editVStatus !== 'unregistered') {
-                            setEditVStatus('pending')
-                          } else if (newCount !== 'new_customer' && editVStatus === 'pending') {
-                            setEditVStatus('active')
-                          }
-                        }}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        {(Object.entries(MONTHLY_COUNT_LABELS) as [MonthlyCount, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">1회단가 (직접입력)</label>
-                      <input type="number" value={editVUnitPrice} onChange={e => setEditVUnitPrice(e.target.value)} placeholder="비워두면 자동계산" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">실내청소 횟수 (월)</label>
-                      <select
-                        value={editVInteriorCount}
-                        onChange={e => setEditVInteriorCount(Number(e.target.value))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value={0}>없음</option>
-                        <option value={1}>월 1회</option>
-                        <option value={2}>월 2회</option>
-                        <option value={4}>월 4회</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">개별 월정가 (특가 설정)</label>
-                      <input type="number" value={editVCustomPrice} onChange={e => setEditVCustomPrice(e.target.value)} placeholder="비워두면 기본 가격표 사용" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" step={1000} min={0} />
-                      <p className="text-xs text-orange-500 mt-0.5">※ 입력 시 기본 가격표보다 이 금액이 우선 적용됩니다</p>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">서비스 종료일</label>
-                      <input type="date" value={editVEndDate} onChange={e => setEditVEndDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">차량 상태</label>
-                      <select value={editVStatus} onChange={e => setEditVStatus(e.target.value as VehicleStatus)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                        {editVCount === 'new_customer' ? (
-                          <>
-                            <option value="pending">등록대기</option>
-                            <option value="irregular">비정기</option>
-                            <option value="unregistered">미등록</option>
-                          </>
-                        ) : (
-                          (Object.entries(STATUS_LABELS) as [VehicleStatus, string][])
-                            .filter(([k]) => k !== 'pending')
-                            .map(([k, label]) => <option key={k} value={k}>{label}</option>)
-                        )}
-                      </select>
-                    </div>
+
+                  {/* ── 탭: 외부세차 / 실내만 ── */}
+                  <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setEditVTab('regular')}
+                      className={`flex-1 text-xs py-1.5 rounded-md font-semibold transition-colors ${
+                        editVTab === 'regular' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                      }`}
+                    >
+                      외부세차
+                    </button>
+                    <button
+                      onClick={() => setEditVTab('interior_only')}
+                      className={`flex-1 text-xs py-1.5 rounded-md font-semibold transition-colors ${
+                        editVTab === 'interior_only' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'
+                      }`}
+                    >
+                      🛋 실내만
+                    </button>
                   </div>
-                  {/* 반복 방식 선택 (월1회/월2회) */}
-                  {(editVCount === 'monthly_1' || editVCount === 'monthly_2') && (
+
+                  {editVTab === 'interior_only' ? (
+                    /* ── 실내만 폼 ── */
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2">
+                        <label className="text-xs text-gray-500 block mb-1">차량명</label>
+                        <input value={editVCarName} onChange={e => setEditVCarName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">차량번호</label>
+                        <input value={editVPlate} onChange={e => setEditVPlate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">월횟수</label>
+                        <select
+                          value={editVCount !== 'onetime' && editVCount !== 'new_customer' ? editVCount : 'monthly_1'}
+                          onChange={e => setEditVCount(e.target.value as MonthlyCount)}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                        >
+                          <option value="monthly_1">월1회</option>
+                          <option value="monthly_2">월2회</option>
+                          <option value="monthly_4">월4회</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">실내 단가 (1회)</label>
+                        <input
+                          type="number"
+                          value={editVUnitPrice}
+                          onChange={e => setEditVUnitPrice(e.target.value)}
+                          placeholder="예: 15000"
+                          className="w-full border border-purple-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-purple-50"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-gray-500 block mb-1">서비스 종료일</label>
+                        <input type="date" value={editVEndDate} onChange={e => setEditVEndDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-xs text-purple-600 bg-purple-50 rounded-lg px-3 py-2">
+                          🛋 실내만 차량 — 정기(active) 등록 — 스케줄 추가 시 실내 카운트만 올라갑니다 (실외 제외)
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── 외부세차 폼 ── */
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2">
+                        <label className="text-xs text-gray-500 block mb-1">차량명</label>
+                        <input value={editVCarName} onChange={e => setEditVCarName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">차량번호</label>
+                        <input value={editVPlate} onChange={e => setEditVPlate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">차량등급</label>
+                        <select value={editVGrade} onChange={e => setEditVGrade(e.target.value as CarGrade)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                          {(Object.entries(CAR_GRADE_LABELS) as [CarGrade, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">월횟수</label>
+                        <select
+                          value={editVCount}
+                          onChange={e => {
+                            const newCount = e.target.value as MonthlyCount
+                            setEditVCount(newCount)
+                            if (newCount === 'new_customer' && editVStatus !== 'irregular' && editVStatus !== 'unregistered') {
+                              setEditVStatus('pending')
+                            } else if (newCount !== 'new_customer' && editVStatus === 'pending') {
+                              setEditVStatus('active')
+                            }
+                          }}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                          {(Object.entries(MONTHLY_COUNT_LABELS) as [MonthlyCount, string][]).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">1회단가 (직접입력)</label>
+                        <input type="number" value={editVUnitPrice} onChange={e => setEditVUnitPrice(e.target.value)} placeholder="비워두면 자동계산" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">실내청소 횟수 (월)</label>
+                        <select
+                          value={editVInteriorCount}
+                          onChange={e => setEditVInteriorCount(Number(e.target.value))}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                          <option value={0}>없음</option>
+                          <option value={1}>월 1회</option>
+                          <option value={2}>월 2회</option>
+                          <option value={4}>월 4회</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">개별 월정가 (특가 설정)</label>
+                        <input type="number" value={editVCustomPrice} onChange={e => setEditVCustomPrice(e.target.value)} placeholder="비워두면 기본 가격표 사용" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" step={1000} min={0} />
+                        <p className="text-xs text-orange-500 mt-0.5">※ 입력 시 기본 가격표보다 이 금액이 우선 적용됩니다</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">서비스 종료일</label>
+                        <input type="date" value={editVEndDate} onChange={e => setEditVEndDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">차량 상태</label>
+                        <select value={editVStatus} onChange={e => setEditVStatus(e.target.value as VehicleStatus)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                          {editVCount === 'new_customer' ? (
+                            <>
+                              <option value="pending">등록대기</option>
+                              <option value="irregular">비정기</option>
+                              <option value="unregistered">미등록</option>
+                            </>
+                          ) : (
+                            (Object.entries(STATUS_LABELS) as [VehicleStatus, string][])
+                              .filter(([k]) => k !== 'pending')
+                              .map(([k, label]) => <option key={k} value={k}>{label}</option>)
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 반복 방식 선택 (월1회/월2회, 외부세차만) */}
+                  {editVTab === 'regular' && (editVCount === 'monthly_1' || editVCount === 'monthly_2') && (
                     <div>
                       <label className="text-xs text-gray-500 block mb-1.5">반복 방식</label>
                       <div className="grid grid-cols-2 gap-2">
@@ -484,14 +575,11 @@ export default function CustomerDetailPage() {
                           {editVCount === 'monthly_2' ? '1·3 / 2·4번째 요일' : 'N번째 요일'}
                         </button>
                       </div>
-                      {editVRepeatMode === 'weekday' && (() => {
-                        // 저장된 일정에서 기준일을 알 수 없으므로 현재 repeat_mode만 표시
-                        return (
-                          <p className="mt-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
-                            {editVCount === 'monthly_2' ? '※ 기준일은 기존 일정 기준으로 유지됩니다' : '※ 저장 시 반복 방식만 변경됩니다'}
-                          </p>
-                        )
-                      })()}
+                      {editVRepeatMode === 'weekday' && (
+                        <p className="mt-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
+                          {editVCount === 'monthly_2' ? '※ 기준일은 기존 일정 기준으로 유지됩니다' : '※ 저장 시 반복 방식만 변경됩니다'}
+                        </p>
+                      )}
                     </div>
                   )}
                   <div className="flex gap-2 pt-1">

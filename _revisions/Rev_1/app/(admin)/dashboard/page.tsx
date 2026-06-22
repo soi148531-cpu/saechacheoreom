@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical, TrendingUp, RotateCcw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, X, AlertTriangle, CheckCircle2, Circle, Trash2, Home, Edit2, Check, Sofa, Plus, GripVertical, TrendingUp } from 'lucide-react'
 import { DndContext, closestCenter, type DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { createClient, db } from '@/lib/supabase/client'
-import { generateSchedules, parseLocalDate } from '@/lib/schedule/generator'
 import { formatPrice } from '@/lib/utils'
 import { usePricing } from '@/lib/hooks/usePricing'
 import type { Vehicle, Schedule } from '@/types'
@@ -37,11 +36,9 @@ export default function CalendarPage() {
   const [searchActive, setSearchActive] = useState(false)
   const [showAddForm,      setShowAddForm]      = useState(false)
   const [addVehicleSearch, setAddVehicleSearch] = useState('')
-  const [addMode,          setAddMode]          = useState<'regular' | 'onetime'>('regular')
   const [reorderMode,      setReorderMode]      = useState(false)
   const [manualOrder,      setManualOrder]      = useState<string[]>([])
   const [viewMode,         setViewMode]         = useState<ViewMode>('calendar')
-  const [monthlyExpenses,  setMonthlyExpenses]  = useState(0)
 
   const touchStartX = useRef<number>(0)
   const touchStartY = useRef<number>(0)
@@ -97,20 +94,7 @@ export default function CalendarPage() {
     setAddVehicleSearch('')
     setReorderMode(false)
     setManualOrder([])
-    setAddMode('regular')
   }, [selectedDate])
-
-  useEffect(() => {
-    const ym = `${year}-${String(month + 1).padStart(2, '0')}`
-    fetch(`/api/expenses?year_month=${ym}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          setMonthlyExpenses((data.data as { amount: number }[]).reduce((s, e) => s + e.amount, 0))
-        }
-      })
-      .catch(() => {})
-  }, [year, month])
 
   function schedulePrice(s: ScheduleWithVehicle): number {
     return (s.vehicle?.unit_price ?? 0) + (s.has_interior ? priceTable.interior : 0)
@@ -174,28 +158,13 @@ export default function CalendarPage() {
     return new Set(matched.map(s => s.scheduled_date))
   }, [schedules, searchQuery])
 
-  const searchMatchVehicleIds = useMemo(() => {
-    if (!searchQuery.trim()) return new Set<string>()
-    const q = searchQuery.trim().toLowerCase()
-    return new Set(
-      schedules
-        .filter(s =>
-          s.vehicle?.plate_number?.toLowerCase().includes(q) ||
-          s.vehicle?.car_name?.toLowerCase().includes(q)
-        )
-        .map(s => s.vehicle_id)
-    )
-  }, [schedules, searchQuery])
-
   const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
   const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`
 
   const regularVehicles = useMemo(() => {
     return vehicles.filter(v =>
-      // 정기 차량: active/paused/pending + non-onetime
-      ((v.monthly_count !== 'onetime' && (v.status === 'active' || v.status === 'paused' || v.status === 'pending')) ||
-      // 비정기 차량도 포함 (일세차 추가 용)
-      v.status === 'irregular') &&
+      v.monthly_count !== 'onetime' &&
+      (v.status === 'active' || v.status === 'paused') &&
       v.start_date <= monthEnd &&
       (!v.end_date || v.end_date >= monthStart)
     )
@@ -249,69 +218,12 @@ export default function CalendarPage() {
     fetchSchedules()
   }
 
-  async function resetRepeatSchedule(schedule: ScheduleWithVehicle) {
-    const mc = schedule.vehicle?.monthly_count
-    if (!mc || mc === 'onetime' || mc === 'new_customer') return
-    if (!confirm(
-      `${schedule.vehicle?.car_name} — ${schedule.scheduled_date} 기준으로\n이후 반복 일정을 재설정합니까?\n(이 날짜 이후 기존 정기 일정 삭제 후 새로 생성)`
-    )) return
-
-    await db().from('schedules')
-      .update({ is_deleted: true })
-      .eq('vehicle_id', schedule.vehicle_id)
-      .gte('scheduled_date', schedule.scheduled_date)
-      .eq('schedule_type', 'regular')
-
-    const repeatMode = (((schedule.vehicle as unknown) as { repeat_mode?: string }).repeat_mode ?? 'date') as 'date' | 'weekday'
-    const newSchedules = generateSchedules(
-      schedule.vehicle_id,
-      parseLocalDate(schedule.scheduled_date),
-      mc as 'monthly_1' | 'monthly_2' | 'monthly_4',
-      repeatMode,
-      24
-    )
-
-    if (newSchedules.length > 0) {
-      await db().from('schedules').insert(newSchedules.map(s => ({
-        vehicle_id:     s.vehicle_id,
-        scheduled_date: s.scheduled_date,
-        is_overcount:   s.is_overcount ?? false,
-        schedule_type:  'regular',
-      })))
-    }
-    fetchSchedules()
-  }
-
-  async function addRegularSchedule(vehicleId: string) {
-    if (!selectedDate) return
-    const vehicle = vehicles.find(v => v.id === vehicleId)
-    const repeatMode = (vehicle as unknown as { repeat_mode?: string })?.repeat_mode
-    // 실내만 차량: interior_only, 비정기/일세차: onetime, 정기: regular
-    const scheduleType =
-      repeatMode === 'interior_only' ? 'interior_only' :
-      vehicle?.status === 'irregular' || vehicle?.monthly_count === 'onetime' ? 'onetime' :
-      'regular'
-    await db().from('schedules').insert({
-      vehicle_id: vehicleId,
-      scheduled_date: selectedDate,
-      schedule_type: scheduleType,
-      is_overcount: false,
-      is_deleted: false,
-    })
-    setShowAddForm(false)
-    setAddVehicleSearch('')
-    fetchSchedules()
-  }
-
   async function addOnetimeSchedule(vehicleId: string) {
     if (!selectedDate) return
-    const vehicle = vehicles.find(v => v.id === vehicleId)
-    const repeatMode = (vehicle as unknown as { repeat_mode?: string })?.repeat_mode
-    const scheduleType = repeatMode === 'interior_only' ? 'interior_only' : 'onetime'
     await db().from('schedules').insert({
       vehicle_id: vehicleId,
       scheduled_date: selectedDate,
-      schedule_type: scheduleType,
+      schedule_type: 'onetime',
       is_overcount: false,
       is_deleted: false,
     })
@@ -391,21 +303,6 @@ export default function CalendarPage() {
     ).slice(0, 10)
   }, [vehicles, addVehicleSearch])
 
-  const unscheduledRegularVehicles = useMemo(() => {
-    if (!selectedDate) return []
-    const scheduledIds = new Set(selectedSchedules.map(s => s.vehicle_id))
-    const q = addVehicleSearch.trim().toLowerCase()
-    return regularVehicles
-      .filter(v => !scheduledIds.has(v.id))
-      .filter(v => !q ||
-        v.plate_number?.toLowerCase().includes(q) ||
-        v.car_name?.toLowerCase().includes(q) ||
-        v.unit_number?.toLowerCase().includes(q) ||
-        v.customer?.name?.toLowerCase().includes(q)
-      )
-      .slice(0, 20)
-  }, [regularVehicles, selectedDate, selectedSchedules, addVehicleSearch])
-
   const selectedDayTotal = useMemo(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     () => selectedSchedules.reduce((sum, s) => sum + schedulePrice(s), 0),
@@ -424,8 +321,6 @@ export default function CalendarPage() {
     const interiorCnt = selectedSchedules.filter(s => s.has_interior).length
     return selectedDayTotal - selectedSchedules.length * OUTDOOR_WORKER_COST - interiorCnt * INTERIOR_WORKER_COST
   }, [selectedSchedules, selectedDayTotal])
-
-  const monthlyNetProfitAfterExpenses = monthlyNetProfit - monthlyExpenses
 
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
@@ -521,10 +416,6 @@ export default function CalendarPage() {
               <div className="flex items-center gap-1">
                 <span className="text-xs text-blue-500 font-medium">순수익</span>
                 <span className="text-sm font-bold text-blue-700">{formatPrice(monthlyNetProfit)}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-purple-500 font-medium">지출후</span>
-                <span className="text-sm font-bold text-purple-700">{formatPrice(monthlyNetProfitAfterExpenses)}</span>
               </div>
             </div>
           )}
@@ -660,7 +551,6 @@ export default function CalendarPage() {
                   <div className="text-center">
                     <div className="text-green-600 font-semibold">예상 {formatPrice(monthlyTotal)}</div>
                     <div className="text-blue-500 font-semibold">순수익 {formatPrice(monthlyNetProfit)}</div>
-                    <div className="text-purple-500 font-semibold">지출후 {formatPrice(monthlyNetProfitAfterExpenses)}</div>
                   </div>
                   <div className="text-right text-gray-400 text-[10px] leading-tight">
                     실외×{schedules.length}<br />실내×{schedules.filter(s => s.has_interior).length}
@@ -743,32 +633,9 @@ export default function CalendarPage() {
               </div>
             )}
 
-            {/* ── 캘린더 모드: 차량 추가 폼 ── */}
+            {/* ── 캘린더 모드: 일세차 추가 폼 ── */}
             {viewMode === 'calendar' && showAddForm && (
               <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-                {/* 탭: 정기 차량 / 일세차 */}
-                <div className="flex gap-1 mb-2">
-                  <button
-                    onClick={() => setAddMode('regular')}
-                    className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors ${
-                      addMode === 'regular'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    정기 차량 ({unscheduledRegularVehicles.length})
-                  </button>
-                  <button
-                    onClick={() => setAddMode('onetime')}
-                    className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors ${
-                      addMode === 'onetime'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    일세차
-                  </button>
-                </div>
                 <input
                   autoFocus
                   type="text"
@@ -777,68 +644,28 @@ export default function CalendarPage() {
                   placeholder="차량명, 번호판, 동호수, 고객명 검색"
                   className="w-full text-sm border border-blue-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white mb-2"
                 />
-                {addMode === 'regular' ? (
-                  unscheduledRegularVehicles.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-2">
-                      {addVehicleSearch ? '검색 결과 없음' : '이날 미등록 정기 차량 없음'}
-                    </p>
-                  ) : (
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {unscheduledRegularVehicles.map(v => {
-                        const isIrregular = v.status === 'irregular' || v.monthly_count === 'onetime'
-                        const isInteriorOnly = (v as unknown as { repeat_mode?: string }).repeat_mode === 'interior_only'
-                        return (
-                          <button
-                            key={v.id}
-                            onClick={() => isIrregular ? addOnetimeSchedule(v.id) : addRegularSchedule(v.id)}
-                            className={`w-full text-left flex items-center gap-2 bg-white hover:bg-blue-100 border rounded-lg px-3 py-2 text-sm transition-colors ${
-                              isInteriorOnly ? 'border-purple-200 hover:bg-purple-50' :
-                              isIrregular ? 'border-orange-200 hover:bg-orange-50' :
-                              'border-blue-100'
-                            }`}
-                          >
-                            {isInteriorOnly && <span className="text-purple-500 text-xs">🛋</span>}
-                            <span className="font-medium text-gray-900">{v.car_name}</span>
-                            <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
-                            {isIrregular && !isInteriorOnly && (
-                              <span className="text-xs text-orange-500 font-medium">비정기</span>
-                            )}
-                            <span className="text-xs text-gray-400">{v.unit_number}</span>
-                            {v.customer?.apartment && (
-                              <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
-                                <Home size={10} />
-                                {v.customer.apartment}
-                              </span>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )
+                {filteredAddVehicles.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-2">검색 결과 없음</p>
                 ) : (
-                  filteredAddVehicles.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-2">검색 결과 없음</p>
-                  ) : (
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {filteredAddVehicles.map(v => (
-                        <button
-                          key={v.id}
-                          onClick={() => addOnetimeSchedule(v.id)}
-                          className="w-full text-left flex items-center gap-2 bg-white hover:bg-blue-100 border border-blue-100 rounded-lg px-3 py-2 text-sm transition-colors"
-                        >
-                          <span className="font-medium text-gray-900">{v.car_name}</span>
-                          <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
-                          <span className="text-xs text-gray-400">{v.unit_number}</span>
-                          {v.customer?.apartment && (
-                            <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
-                              <Home size={10} />
-                              {v.customer.apartment}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {filteredAddVehicles.map(v => (
+                      <button
+                        key={v.id}
+                        onClick={() => addOnetimeSchedule(v.id)}
+                        className="w-full text-left flex items-center gap-2 bg-white hover:bg-blue-100 border border-blue-100 rounded-lg px-3 py-2 text-sm transition-colors"
+                      >
+                        <span className="font-medium text-gray-900">{v.car_name}</span>
+                        <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{v.plate_number}</span>
+                        <span className="text-xs text-gray-400">{v.unit_number}</span>
+                        {v.customer?.apartment && (
+                          <span className="text-xs text-blue-500 flex items-center gap-0.5 ml-auto">
+                            <Home size={10} />
+                            {v.customer.apartment}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -858,11 +685,9 @@ export default function CalendarPage() {
                             onDelete={() => deleteSchedule(s.id)}
                             onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
                             onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                            onRepeatReset={() => resetRepeatSchedule(s)}
                             done={selectedDateDoneSet.has(s.vehicle_id)}
                             overcount={vehicleOvercountMap[s.vehicle_id]?.overcount}
                             overcountCount={vehicleOvercountMap[s.vehicle_id]?.count}
-                            highlight={searchQuery.trim() ? searchMatchVehicleIds.has(s.vehicle_id) : false}
                           />
                         </SortableRow>
                       ))}
@@ -877,11 +702,9 @@ export default function CalendarPage() {
                         onDelete={() => deleteSchedule(s.id)}
                         onDateChange={(newDate) => changeScheduleDate(s.id, newDate)}
                         onInteriorToggle={() => toggleInterior(s.id, !!s.has_interior)}
-                        onRepeatReset={() => resetRepeatSchedule(s)}
                         done={selectedDateDoneSet.has(s.vehicle_id)}
                         overcount={vehicleOvercountMap[s.vehicle_id]?.overcount}
                         overcountCount={vehicleOvercountMap[s.vehicle_id]?.count}
-                        highlight={searchQuery.trim() ? searchMatchVehicleIds.has(s.vehicle_id) : false}
                       />
                     ))}
                   </div>
@@ -972,17 +795,15 @@ function SortableRow({ id, children }: { id: string; children: React.ReactNode }
 
 /* ─── 일정 행 ─── */
 function ScheduleRow({
-  schedule, onDelete, onDateChange, onInteriorToggle, onRepeatReset, done, overcount, overcountCount, highlight,
+  schedule, onDelete, onDateChange, onInteriorToggle, done, overcount, overcountCount,
 }: {
   schedule: ScheduleWithVehicle
   onDelete: () => void
   onDateChange: (newDate: string) => void
   onInteriorToggle: () => void
-  onRepeatReset?: () => void
   done: boolean
   overcount?: boolean
   overcountCount?: number
-  highlight?: boolean
 }) {
   const [editingDate, setEditingDate] = useState(false)
   const [newDate,     setNewDate]     = useState(schedule.scheduled_date)
@@ -997,7 +818,7 @@ function ScheduleRow({
   const v = schedule.vehicle
 
   return (
-    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''} ${highlight ? 'bg-yellow-200 border-l-4 border-yellow-500' : ''}`}>
+    <div className={`px-4 py-3 ${done ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-3">
         {done
           ? <CheckCircle2 size={20} className="text-green-500 flex-shrink-0 mt-0.5" />
@@ -1091,16 +912,6 @@ function ScheduleRow({
               <Sofa size={10} />
               {schedule.has_interior ? '실내有 ✓' : '실내有 추가'}
             </button>
-
-            {schedule.schedule_type === 'regular' && onRepeatReset && (
-              <button
-                onClick={onRepeatReset}
-                className="flex items-center gap-0.5 text-xs text-indigo-400 hover:text-indigo-600 transition-colors"
-              >
-                <RotateCcw size={10} />
-                반복 재설정
-              </button>
-            )}
           </div>
         </div>
 

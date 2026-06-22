@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, useRef, memo } from 'react'
-import { CheckCircle2, Circle, ChevronDown, ChevronUp, Home, Check, X, Sofa, CalendarDays, Copy, CheckCheck, Settings } from 'lucide-react'
+import { CheckCircle2, Circle, ChevronDown, ChevronUp, Home, Check, X, Sofa, CalendarDays, Copy, CheckCheck } from 'lucide-react'
 import Link from 'next/link'
 import { createClient, db } from '@/lib/supabase/client'
 import { CAR_GRADE_LABELS } from '@/lib/constants/pricing'
@@ -30,15 +30,11 @@ interface TaskItem {
   interiorDone: boolean
   expanded: boolean
   washRecordId: string | null
-  workerName: string | null
+  workerName: string | null   // 실제 작업자 이름
   editingAdminNote: boolean
-  assignedWorker: 1 | 2 | 3  // 기본값 1번
+  selfWork: boolean  // 사장이 직접 작업 → 카톡 복사 제외
+  skipped: boolean   // 보류 처리 → 하단 보류 섹션으로 이동
 }
-
-type ActiveTab = 'all' | 1 | 2 | 3
-
-const TAB_ORDER: ActiveTab[] = ['all', 1, 2, 3]
-const WORKER_NAMES_KEY = 'saechachorom_worker_names'
 
 export default function StaffPage() {
   const supabaseRef = useRef(createClient())
@@ -56,15 +52,7 @@ export default function StaffPage() {
   })
   const [savingKey,    setSavingKey]    = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
-  const [activeTab,    setActiveTab]    = useState<ActiveTab>('all')
-
-  // 작업자 이름 설정 (localStorage)
-  const [workerNames, setWorkerNames] = useState<Record<1|2|3, string>>({ 1: '', 2: '', 3: '' })
-  const [showSettings, setShowSettings] = useState(false)
-  const [editingNames, setEditingNames] = useState<Record<1|2|3, string>>({ 1: '', 2: '', 3: '' })
-
-  // 스와이프 감지용
-  const touchStartXRef = useRef<number | null>(null)
+  const [skippedOpen,  setSkippedOpen]  = useState(false)
 
   // 월간 일정/완료 데이터
   const [monthlySchedules,  setMonthlySchedules]  = useState<{ vehicle_id: string; scheduled_date: string }[]>([])
@@ -72,56 +60,6 @@ export default function StaffPage() {
 
   const [completionModalOpen, setCompletionModalOpen] = useState(false)
   const [selectedTaskIdx,     setSelectedTaskIdx]     = useState<number | null>(null)
-
-  // localStorage에서 이름 로드
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(WORKER_NAMES_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved) as Record<1|2|3, string>
-        setWorkerNames(parsed)
-        setEditingNames(parsed)
-      }
-    } catch { /* ignore */ }
-  }, [])
-
-  function openSettings() {
-    setEditingNames({ ...workerNames })
-    setShowSettings(true)
-  }
-
-  function saveSettings() {
-    setWorkerNames(editingNames)
-    try { localStorage.setItem(WORKER_NAMES_KEY, JSON.stringify(editingNames)) } catch { /* ignore */ }
-    setShowSettings(false)
-  }
-
-  // 탭 라벨: 이름 설정 시 이름 표시, 없으면 번호
-  function workerLabel(n: 1 | 2 | 3): string {
-    return workerNames[n] || `${n}번`
-  }
-
-  // ─── 스와이프 핸들러 ───
-  function handleTouchStart(e: React.TouchEvent) {
-    touchStartXRef.current = e.touches[0].clientX
-  }
-
-  function handleTouchEnd(e: React.TouchEvent) {
-    if (touchStartXRef.current === null) return
-    const diff = touchStartXRef.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) < 50) { touchStartXRef.current = null; return }
-    const currentIndex = TAB_ORDER.indexOf(activeTab)
-    if (diff > 0) {
-      // 왼쪽 스와이프 → 다음 탭 (전체→1→2→3)
-      const next = TAB_ORDER[currentIndex + 1]
-      if (next !== undefined) setActiveTab(next)
-    } else {
-      // 오른쪽 스와이프 → 이전 탭 (3→2→1→전체)
-      const prev = TAB_ORDER[currentIndex - 1]
-      if (prev !== undefined) setActiveTab(prev)
-    }
-    touchStartXRef.current = null
-  }
 
   const detectSchemaSupport = useCallback(async () => {
     const [{ error: e1 }, { error: e2 }, { error: e3 }] = await Promise.all([
@@ -213,7 +151,8 @@ export default function StaffPage() {
         washRecordId:     record?.id ?? null,
         workerName:       record?.completed_by ?? null,
         editingAdminNote: false,
-        assignedWorker:   1,  // 기본값 1번
+        selfWork:         false,
+        skipped:          false,
       }
     })
 
@@ -240,13 +179,6 @@ export default function StaffPage() {
 
   function updateTask(idx: number, patch: Partial<TaskItem>) {
     setTasks(prev => prev.map((t, i) => i === idx ? { ...t, ...patch } : t))
-  }
-
-  // 작업자 배정: 1번은 항상 누르면 1번 / 2·3번은 현재 번호면 1번으로 복귀
-  function assignWorker(idx: number, n: 1 | 2 | 3) {
-    const task = tasks[idx]
-    const next: 1 | 2 | 3 = (task.assignedWorker === n && n !== 1) ? 1 : n
-    updateTask(idx, { assignedWorker: next })
   }
 
   async function toggleDone(idx: number, completedBy: 'worker' | 'admin' = 'worker') {
@@ -317,8 +249,9 @@ export default function StaffPage() {
     const lines: string[] = [header]
     let interiorAddCount = 0
 
-    const regularTasks    = tasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type !== 'interior_only')
-    const interiorOnlyTasks = tasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only')
+    const workerTasks = tasks.filter(t => !t.selfWork && !t.skipped)
+    const regularTasks    = workerTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type !== 'interior_only')
+    const interiorOnlyTasks = workerTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only')
 
     // 아파트 이름에서 동/숫자 제거 (예: "서한이다음 621동" → "서한이다음")
     const baseApt = (apt: string) => apt.replace(/\s*\d+동?\s*$/, '').trim() || apt
@@ -374,26 +307,12 @@ export default function StaffPage() {
     })
   }
 
-  // 탭에 따른 필터링
-  const displayTasks = activeTab === 'all'
-    ? tasks
-    : tasks.filter(t => t.assignedWorker === activeTab)
-
-  const completedCount = displayTasks.filter(t => t.done).length
-
-  const tabItems: { key: ActiveTab; label: string }[] = [
-    { key: 'all', label: '전체' },
-    { key: 1,     label: workerLabel(1) },
-    { key: 2,     label: workerLabel(2) },
-    { key: 3,     label: workerLabel(3) },
-  ]
+  const activeTasks  = tasks.filter(t => !t.skipped)
+  const skippedTasks = tasks.filter(t => t.skipped)
+  const completedCount = activeTasks.filter(t => t.done).length
 
   return (
-    <div
-      className="min-h-screen bg-gray-50"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="min-h-screen bg-gray-50">
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
@@ -402,14 +321,6 @@ export default function StaffPage() {
             <p className="text-xs text-gray-400">새차처럼 세차 서비스</p>
           </div>
           <div className="flex items-center gap-2">
-            {/* 작업자 이름 설정 버튼 */}
-            <button
-              onClick={openSettings}
-              className="flex items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100"
-              title="작업자 이름 설정"
-            >
-              <Settings size={16} />
-            </button>
             <Link
               href="/dashboard"
               className="flex items-center gap-1.5 bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors"
@@ -425,39 +336,14 @@ export default function StaffPage() {
                 className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700"
               />
               <p className="text-xs text-gray-500 mt-0.5">
-                {completedCount} / {displayTasks.length} 완료
+                {completedCount} / {activeTasks.length} 완료{skippedTasks.length > 0 && ` (보류 ${skippedTasks.length})`}
               </p>
             </div>
           </div>
         </div>
-
-        {/* ─── 탭 바 (전체 / 1 / 2 / 3) ─── */}
-        <div className="max-w-lg mx-auto flex border-t border-gray-100">
-          {tabItems.map(({ key, label }) => (
-            <button
-              key={String(key)}
-              onClick={() => setActiveTab(key)}
-              className={`flex-1 py-2.5 text-sm font-semibold transition-colors border-b-2 ${
-                activeTab === key
-                  ? 'border-blue-500 text-blue-600 bg-blue-50'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 bg-white'
-              }`}
-            >
-              {label}
-              {key !== 'all' && (
-                <span className={`ml-1 text-xs ${
-                  activeTab === key ? 'text-blue-400' : 'text-gray-300'
-                }`}>
-                  ({tasks.filter(t => t.assignedWorker === key).length})
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {displayTasks.length > 0 && (
+        {activeTasks.length > 0 && (
           <div className="h-1 bg-gray-100">
-            <div className="h-1 bg-blue-500 transition-all" style={{ width: `${(completedCount / displayTasks.length) * 100}%` }} />
+            <div className="h-1 bg-blue-500 transition-all" style={{ width: `${(completedCount / activeTasks.length) * 100}%` }} />
           </div>
         )}
       </div>
@@ -480,50 +366,92 @@ export default function StaffPage() {
 
         {loading ? (
           <div className="text-center py-16 text-gray-400">불러오는 중...</div>
-        ) : displayTasks.length === 0 ? (
+        ) : tasks.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
-            {activeTab === 'all'
-              ? <p className="text-sm">오늘 예약된 차량이 없습니다</p>
-              : <p className="text-sm">{workerLabel(activeTab as 1|2|3)} 작업자에게 배정된 차량이 없습니다</p>
-            }
+            <p className="text-sm">오늘 예약된 차량이 없습니다</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {displayTasks.map((task) => {
-              const idx = tasks.indexOf(task)
-              const vId = task.schedule.vehicle_id
-              const vSchedules = monthlySchedules
-                .filter(s => s.vehicle_id === vId)
-                .map(s => s.scheduled_date)
-                .sort()
-              const vWashSet = new Set(
-                monthlyWashDates.filter(w => w.vehicle_id === vId).map(w => w.wash_date)
-              )
-              return (
-                <TaskCard
-                  key={task.schedule.id}
-                  task={task}
-                  priceTable={priceTable}
-                  workerNames={workerNames}
-                  isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
-                  canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
-                  monthlyDates={vSchedules}
-                  monthlyWashSet={vWashSet}
-                  onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
-                  onCancel={() => toggleDone(idx)}
-                  onAssignWorker={(n) => assignWorker(idx, n)}
-                  onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
-                  onMemoChange={v => updateTask(idx, { memo: v })}
-                  onMemoSave={() => saveWorkerMemo(idx)}
-                  onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
-                  onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
-                  onAdminNoteSave={() => saveAdminNote(idx)}
-                  onAdminNoteCancel={() => updateTask(idx, { editingAdminNote: false })}
-                  onExpand={() => updateTask(idx, { expanded: !task.expanded })}
-                />
-              )
-            })}
-          </div>
+          <>
+            <div className="space-y-3">
+              {activeTasks.map((task) => {
+                const idx = tasks.indexOf(task)
+                const vId = task.schedule.vehicle_id
+                const vSchedules = monthlySchedules
+                  .filter(s => s.vehicle_id === vId)
+                  .map(s => s.scheduled_date)
+                  .sort()
+                const vWashSet = new Set(
+                  monthlyWashDates.filter(w => w.vehicle_id === vId).map(w => w.wash_date)
+                )
+                return (
+                  <TaskCard
+                    key={task.schedule.id}
+                    task={task}
+                    priceTable={priceTable}
+                    isSaving={savingKey === `done:${task.schedule.id}` || savingKey === `admin:${task.schedule.id}` || savingKey === `memo:${task.schedule.id}`}
+                    canPersistAdminNote={!!schemaSupport?.scheduleAdminMemo || !!schemaSupport?.washAdminNote}
+                    monthlyDates={vSchedules}
+                    monthlyWashSet={vWashSet}
+                    onToggleWorker={() => { setSelectedTaskIdx(idx); setCompletionModalOpen(true) }}
+                    onCancel={() => toggleDone(idx)}
+                    onSelfWorkToggle={() => updateTask(idx, { selfWork: !task.selfWork })}
+                    onSkip={() => updateTask(idx, { skipped: true, expanded: false })}
+                    onInteriorToggle={() => updateTask(idx, { interiorDone: !task.interiorDone })}
+                    onMemoChange={v => updateTask(idx, { memo: v })}
+                    onMemoSave={() => saveWorkerMemo(idx)}
+                    onAdminNoteChange={v => updateTask(idx, { adminNote: v })}
+                    onAdminNoteEditStart={() => updateTask(idx, { editingAdminNote: true })}
+                    onAdminNoteSave={() => saveAdminNote(idx)}
+                    onAdminNoteCancel={() => updateTask(idx, { editingAdminNote: false })}
+                    onExpand={() => updateTask(idx, { expanded: !task.expanded })}
+                  />
+                )
+              })}
+            </div>
+
+            {/* 보류 섹션 */}
+            {skippedTasks.length > 0 && (
+              <div className="mt-4 border border-dashed border-gray-300 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setSkippedOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 text-sm font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base">⏸</span>
+                    보류 {skippedTasks.length}건 (차량 못 찾음 등)
+                  </span>
+                  <span className="text-gray-400">{skippedOpen ? '▲' : '▼'}</span>
+                </button>
+                {skippedOpen && (
+                  <div className="divide-y divide-gray-100">
+                    {skippedTasks.map((task) => {
+                      const idx = tasks.indexOf(task)
+                      const v = task.schedule.vehicle
+                      return (
+                        <div key={task.schedule.id} className="flex items-center gap-3 px-4 py-3 bg-white">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm text-gray-500">{v.car_name}</span>
+                              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{v.plate_number}</span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {v.customer?.name} · {v.customer?.apartment}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => updateTask(idx, { skipped: false, expanded: false })}
+                            className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 font-medium transition-colors"
+                          >
+                            복원
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -546,7 +474,6 @@ export default function StaffPage() {
           scheduled_date={tasks[selectedTaskIdx].schedule.scheduled_date}
           schedule_id={tasks[selectedTaskIdx].schedule.id}
           isInteriorOnly={(tasks[selectedTaskIdx].schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only'}
-          hasInterior={!!tasks[selectedTaskIdx].schedule.has_interior}
           onSuccess={() => {
             setCompletionModalOpen(false)
             setSelectedTaskIdx(null)
@@ -554,66 +481,14 @@ export default function StaffPage() {
           }}
         />
       )}
-
-      {/* ─── 작업자 이름 설정 모달 ─── */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowSettings(false)}>
-          <div
-            className="w-full max-w-lg bg-white rounded-t-2xl p-6 pb-8"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-bold text-gray-900">작업자 이름 설정</h2>
-              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              {([1, 2, 3] as const).map(n => (
-                <div key={n} className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                    n === 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {n}
-                  </div>
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={editingNames[n]}
-                      onChange={e => setEditingNames(prev => ({ ...prev, [n]: e.target.value }))}
-                      placeholder={`${n}번 작업자 이름 (예: 홍길동)`}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    />
-                  </div>
-                  {n === 1 && (
-                    <span className="text-xs text-blue-500 font-medium flex-shrink-0">기본</span>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <p className="text-xs text-gray-400 mb-4">
-              이름을 입력하면 탭에 이름이 표시됩니다. 비워두면 번호로 표시됩니다.
-            </p>
-
-            <button
-              onClick={saveSettings}
-              className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
-            >
-              저장
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
 /* ─── 작업 카드 ─── */
 const TaskCard = memo(function TaskCard({
-  task, priceTable, workerNames, onToggleWorker, onCancel,
-  onAssignWorker, onInteriorToggle,
+  task, priceTable, onToggleWorker, onCancel,
+  onSelfWorkToggle, onSkip, onInteriorToggle,
   onMemoChange, onMemoSave, onAdminNoteChange,
   onAdminNoteEditStart, onAdminNoteSave, onAdminNoteCancel,
   onExpand, isSaving, canPersistAdminNote,
@@ -621,10 +496,10 @@ const TaskCard = memo(function TaskCard({
 }: {
   task: TaskItem
   priceTable: PriceTable
-  workerNames: Record<1|2|3, string>
   onToggleWorker: () => void
   onCancel: () => void
-  onAssignWorker: (n: 1 | 2 | 3) => void
+  onSelfWorkToggle: () => void
+  onSkip: () => void
   onInteriorToggle: () => void
   onMemoChange: (v: string) => void
   onMemoSave: () => void
@@ -717,31 +592,28 @@ const TaskCard = memo(function TaskCard({
           )}
         </div>
 
-        {/* 작업자 배정 버튼 1 / 2 / 3 */}
-        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
           <button onClick={onExpand} className="text-gray-400">
             {task.expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
-          <div className="flex gap-1">
-            {([1, 2, 3] as const).map(n => {
-              const isActive = task.assignedWorker === n
-              const name = workerNames[n]
-              return (
-                <button
-                  key={n}
-                  onClick={() => onAssignWorker(n)}
-                  title={name || `${n}번 작업자`}
-                  className={`min-w-[28px] h-7 px-1.5 rounded-full border text-xs font-bold transition-all ${
-                    isActive
-                      ? 'bg-blue-500 border-blue-500 text-white shadow-sm scale-110'
-                      : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-blue-300 hover:text-blue-400'
-                  }`}
-                >
-                  {name ? name.slice(0, 1) : n}
-                </button>
-              )
-            })}
-          </div>
+          <button
+            onClick={onSelfWorkToggle}
+            className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
+              task.selfWork
+                ? 'bg-amber-100 border-amber-300 text-amber-700'
+                : 'bg-gray-50 border-gray-200 text-gray-400'
+            }`}
+          >
+            {task.selfWork ? '직접✓' : '직접'}
+          </button>
+          {!task.done && (
+            <button
+              onClick={onSkip}
+              className="text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-400 hover:bg-red-50 hover:border-red-200 hover:text-red-400 font-medium transition-colors"
+            >
+              보류
+            </button>
+          )}
         </div>
       </div>
 

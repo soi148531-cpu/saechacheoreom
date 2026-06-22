@@ -65,6 +65,9 @@ export default function AddVehiclePage() {
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [vehicle,  setVehicle]  = useState<VehicleForm>(emptyVehicle())
+  const [vehicleTab, setVehicleTab] = useState<'regular' | 'interior_only'>('regular')
+  const [interiorUnitPrice,    setInteriorUnitPrice]    = useState('')
+  const [interiorMonthlyCount, setInteriorMonthlyCount] = useState<'monthly_1' | 'monthly_2' | 'monthly_4'>('monthly_1')
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState('')
 
@@ -113,52 +116,102 @@ export default function AddVehiclePage() {
     setError('')
 
     try {
-      const status = vehicle.monthly_count === 'onetime' ? 'irregular'
-        : vehicle.monthly_count === 'new_customer' ? 'pending'
-        : 'active'
+      if (vehicleTab === 'interior_only') {
+        // 실내만 차량 등록 — 정기(active) + interior_only 일정 자동 생성
+        const intMonthlyPrice = getMonthlyPrice(vehicle.car_grade, interiorMonthlyCount)
+        const intUnitPrice = interiorUnitPrice
+          ? Number(interiorUnitPrice)
+          : Math.round(intMonthlyPrice / (interiorMonthlyCount === 'monthly_1' ? 1 : interiorMonthlyCount === 'monthly_2' ? 2 : 4))
 
-      const { data: savedVehicle, error: vErr } = await db()
-        .from('vehicles')
-        .insert({
-          customer_id:   id,
-          car_name:      vehicle.car_name.trim(),
-          plate_number:  vehicle.plate_number.trim().replace(/\s/g, ''),
-          car_grade:     vehicle.car_grade,
-          monthly_count: vehicle.monthly_count,
-          repeat_mode:   vehicle.repeat_mode,
-          monthly_price: monthlyPrice ?? null,
-          unit_price:    unitPrice || null,
-          start_date:    vehicle.start_date || vehicle.base_date,
-          end_date:      vehicle.end_date || null,
-          interior_count: vehicle.interior_count,
-          status,
-        })
-        .select()
-        .single()
+        const { data: savedVehicle, error: vErr } = await db()
+          .from('vehicles')
+          .insert({
+            customer_id:    id,
+            car_name:       vehicle.car_name.trim(),
+            plate_number:   vehicle.plate_number.trim().replace(/\s/g, ''),
+            car_grade:      vehicle.car_grade,
+            monthly_count:  interiorMonthlyCount,
+            repeat_mode:    'interior_only',
+            unit_price:     intUnitPrice || null,
+            monthly_price:  null,
+            custom_price:   null,
+            start_date:     vehicle.start_date || vehicle.base_date,
+            end_date:       vehicle.end_date || null,
+            interior_count: 0,
+            status:         'active',
+          })
+          .select()
+          .single()
+        if (vErr) throw vErr
 
-      if (vErr) throw vErr
-
-      // 일정 자동 생성 (비정기·신규차량 제외)
-      if (vehicle.monthly_count !== 'onetime' && vehicle.monthly_count !== 'new_customer') {
+        // 실내만 일정 자동 생성 (스케줄 타입 interior_only)
         const baseDate = parseLocalDate(vehicle.base_date)
-        const schedules = generateSchedules(
+        const intSchedules = generateSchedules(
           savedVehicle.id,
           baseDate,
-          vehicle.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
-          vehicle.repeat_mode,
+          interiorMonthlyCount,
+          'date',
           24
         )
+        if (intSchedules.length > 0) {
+          const { error: schErr } = await db()
+            .from('schedules')
+            .insert(intSchedules.map(s => ({
+              vehicle_id:     s.vehicle_id,
+              scheduled_date: s.scheduled_date,
+              is_overcount:   s.is_overcount ?? false,
+              schedule_type:  'interior_only',
+            })))
+          if (schErr) throw schErr
+        }
+      } else {
+        const status = vehicle.monthly_count === 'onetime' ? 'irregular'
+          : vehicle.monthly_count === 'new_customer' ? 'pending'
+          : 'active'
 
-        const { error: schErr } = await db()
-          .from('schedules')
-          .insert(schedules.map(s => ({
-            vehicle_id:     s.vehicle_id,
-            scheduled_date: s.scheduled_date,
-            is_overcount:   s.is_overcount ?? false,
-            schedule_type:  'regular',
-          })))
+        const { data: savedVehicle, error: vErr } = await db()
+          .from('vehicles')
+          .insert({
+            customer_id:   id,
+            car_name:      vehicle.car_name.trim(),
+            plate_number:  vehicle.plate_number.trim().replace(/\s/g, ''),
+            car_grade:     vehicle.car_grade,
+            monthly_count: vehicle.monthly_count,
+            repeat_mode:   vehicle.repeat_mode,
+            monthly_price: monthlyPrice ?? null,
+            unit_price:    unitPrice || null,
+            start_date:    vehicle.start_date || vehicle.base_date,
+            end_date:      vehicle.end_date || null,
+            interior_count: vehicle.interior_count,
+            status,
+          })
+          .select()
+          .single()
 
-        if (schErr) throw schErr
+        if (vErr) throw vErr
+
+        // 일정 자동 생성 (비정기·신규차량 제외)
+        if (vehicle.monthly_count !== 'onetime' && vehicle.monthly_count !== 'new_customer') {
+          const baseDate = parseLocalDate(vehicle.base_date)
+          const schedules = generateSchedules(
+            savedVehicle.id,
+            baseDate,
+            vehicle.monthly_count as 'monthly_1' | 'monthly_2' | 'monthly_4',
+            vehicle.repeat_mode,
+            24
+          )
+
+          const { error: schErr } = await db()
+            .from('schedules')
+            .insert(schedules.map(s => ({
+              vehicle_id:     s.vehicle_id,
+              scheduled_date: s.scheduled_date,
+              is_overcount:   s.is_overcount ?? false,
+              schedule_type:  'regular',
+            })))
+
+          if (schErr) throw schErr
+        }
       }
 
       router.push(`/customers/${id}`)
@@ -187,10 +240,116 @@ export default function AddVehiclePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <section className="bg-white rounded-xl border border-blue-100 p-4">
-          <h2 className="font-semibold text-blue-600 text-sm uppercase tracking-wide mb-4">
-            차량 정보
-          </h2>
+        {/* ── 탭: 외부세차 / 실내만 ── */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          <button
+            type="button"
+            onClick={() => setVehicleTab('regular')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+              vehicleTab === 'regular' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+            }`}
+          >
+            외부세차
+          </button>
+          <button
+            type="button"
+            onClick={() => setVehicleTab('interior_only')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+              vehicleTab === 'interior_only' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'
+            }`}
+          >
+            🛋 실내만
+          </button>
+        </div>
+
+        {vehicleTab === 'interior_only' ? (
+          <section className="bg-white rounded-xl border border-purple-200 p-4">
+            <h2 className="font-semibold text-purple-600 text-sm uppercase tracking-wide mb-4">
+              🛋 실내만 차량 정보
+            </h2>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="차량명" required>
+                  <input
+                    value={vehicle.car_name}
+                    onChange={e => updateVehicle('car_name', e.target.value)}
+                    placeholder="팔리세이드"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="차량번호" required>
+                  <input
+                    value={vehicle.plate_number}
+                    onChange={e => updateVehicle('plate_number', e.target.value)}
+                    placeholder="12가3456"
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="월횟수">
+                  <select
+                    value={interiorMonthlyCount}
+                    onChange={e => setInteriorMonthlyCount(e.target.value as 'monthly_1' | 'monthly_2' | 'monthly_4')}
+                    className={selectCls}
+                  >
+                    <option value="monthly_1">월1회</option>
+                    <option value="monthly_2">월2회</option>
+                    <option value="monthly_4">월4회</option>
+                  </select>
+                </Field>
+                <Field label="실내 단가 (1회)">
+                  <input
+                    type="number"
+                    value={interiorUnitPrice}
+                    onChange={e => setInteriorUnitPrice(e.target.value)}
+                    placeholder="비워두면 자동계산"
+                    className={`${inputCls} border-purple-300 bg-purple-50`}
+                  />
+                </Field>
+              </div>
+
+              <Field label="반복 기준일 ✳" required>
+                <input
+                  type="date"
+                  value={vehicle.base_date}
+                  onChange={e => updateVehicle('base_date', e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <p className="text-xs text-gray-400 -mt-2">이 날짜를 기준으로 매월 N일 실내 일정 자동 생성</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="시작일">
+                  <input
+                    type="date"
+                    value={vehicle.start_date}
+                    onChange={e => updateVehicle('start_date', e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="종료일">
+                  <input
+                    type="date"
+                    value={vehicle.end_date}
+                    onChange={e => updateVehicle('end_date', e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-3 text-sm text-purple-700">
+                🛋 실내만 차량으로 등록됩니다.<br />
+                캘린더에서 일세차 추가 시 실내 카운트만 올라갑니다 (실외 제외)
+              </div>
+            </div>
+          </section>
+        ) : (
+          /* ── 외부세차 폼 ── */
+          <section className="bg-white rounded-xl border border-blue-100 p-4">
+            <h2 className="font-semibold text-blue-600 text-sm uppercase tracking-wide mb-4">
+              차량 정보
+            </h2>
 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -345,7 +504,8 @@ export default function AddVehiclePage() {
               )}
             </div>
           </div>
-        </section>
+          </section>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
