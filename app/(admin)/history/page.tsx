@@ -116,7 +116,9 @@ export default function HistoryPage() {
     setTaxLoading(true)
     const [y, m] = taxYearMonth.split('-')
     const startDate = `${y}-${m}-01`
-    const endDate   = new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]
+    // 월 마지막 날짜를 문자열로 계산 (toISOString()은 UTC 기준이라 KST에서 날짜가 하루 밀리는 버그 방지)
+    const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate()
+    const endDate = `${y}-${m}-${String(lastDay).padStart(2, '0')}`
 
     const [{ data: records }, { data: billings }] = await Promise.all([
       supabase

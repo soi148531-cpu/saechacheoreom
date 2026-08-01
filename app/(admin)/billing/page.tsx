@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertCircle, Plus, Trash2, Copy, Edit2, Save, Search, TrendingUp } from 'lucide-react'
@@ -206,7 +206,9 @@ export default function BillingPage() {
     setLoading(true)
     const [y, m] = yearMonth.split('-')
     const startDate = `${y}-${m}-01`
-    const endDate   = new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]
+    // 월 마지막 날짜를 문자열로 계산 (toISOString()은 UTC 기준이라 KST에서 날짜가 하루 밀리는 버그 방지)
+    const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate()
+    const endDate = `${y}-${m}-${String(lastDay).padStart(2, '0')}`
 
     const [vRes, rRes, bRes, sRes] = await Promise.all([
       supabase.from('vehicles').select('*, customer:customers(*)'),

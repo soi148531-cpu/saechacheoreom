@@ -39,6 +39,7 @@ type ActiveTab = 'all' | 1 | 2 | 3
 
 const TAB_ORDER: ActiveTab[] = ['all', 1, 2, 3]
 const WORKER_NAMES_KEY = 'saechachorom_worker_names'
+const ASSIGNED_WORKERS_KEY = 'saechachorom_assigned_workers'
 
 export default function StaffPage() {
   const supabaseRef = useRef(createClient())
@@ -47,7 +48,16 @@ export default function StaffPage() {
 
   const [tasks,        setTasks]        = useState<TaskItem[]>([])
   const [loading,      setLoading]      = useState(true)
-  const [date,         setDate]         = useState<string | null>(() => getTodayKST())
+  const [isMounted,    setIsMounted]    = useState(false)
+
+  const [date,         setDate]         = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('saechachorom_staff_date')
+      if (saved) return saved
+    }
+    return getTodayKST()
+  })
+
   const [schemaSupport, setSchemaSupport] = useState<SchemaSupport | null>(() => {
     try {
       const cached = sessionStorage.getItem('schemaSupport')
@@ -56,12 +66,42 @@ export default function StaffPage() {
   })
   const [savingKey,    setSavingKey]    = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
-  const [activeTab,    setActiveTab]    = useState<ActiveTab>('all')
+
+  const [activeTab,    setActiveTab]    = useState<ActiveTab>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('saechachorom_active_tab')
+      if (saved === 'all' || saved === '1' || saved === '2' || saved === '3') {
+        return saved === 'all' ? 'all' : Number(saved) as ActiveTab
+      }
+    }
+    return 'all'
+  })
 
   // 작업자 이름 설정 (localStorage)
-  const [workerNames, setWorkerNames] = useState<Record<1|2|3, string>>({ 1: '', 2: '', 3: '' })
+  const [workerNames, setWorkerNames] = useState<Record<1|2|3, string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(WORKER_NAMES_KEY)
+        if (saved) return JSON.parse(saved) as Record<1|2|3, string>
+      } catch {}
+    }
+    return { 1: '', 2: '', 3: '' }
+  })
   const [showSettings, setShowSettings] = useState(false)
-  const [editingNames, setEditingNames] = useState<Record<1|2|3, string>>({ 1: '', 2: '', 3: '' })
+  const [editingNames, setEditingNames] = useState<Record<1|2|3, string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(WORKER_NAMES_KEY)
+        if (saved) return JSON.parse(saved) as Record<1|2|3, string>
+      } catch {}
+    }
+    return { 1: '', 2: '', 3: '' }
+  })
+
+  // 클라이언트 마운트 완료
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // 스와이프 감지용
   const touchStartXRef = useRef<number | null>(null)
@@ -73,15 +113,25 @@ export default function StaffPage() {
   const [completionModalOpen, setCompletionModalOpen] = useState(false)
   const [selectedTaskIdx,     setSelectedTaskIdx]     = useState<number | null>(null)
 
-  // localStorage에서 이름 로드
-  useEffect(() => {
+  // assignedWorker 상태를 localStorage에서 복원
+  const restoreAssignedWorkers = useCallback((items: TaskItem[]): TaskItem[] => {
     try {
-      const saved = localStorage.getItem(WORKER_NAMES_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved) as Record<1|2|3, string>
-        setWorkerNames(parsed)
-        setEditingNames(parsed)
-      }
+      const saved = localStorage.getItem(ASSIGNED_WORKERS_KEY)
+      if (!saved) return items
+      const map = JSON.parse(saved) as Record<string, 1|2|3>
+      return items.map(item => ({
+        ...item,
+        assignedWorker: map[item.schedule.id] ?? 1,
+      }))
+    } catch { return items }
+  }, [])
+
+  // assignedWorker 변경 시 localStorage에 저장
+  const persistAssignedWorkers = useCallback((items: TaskItem[]) => {
+    try {
+      const map: Record<string, 1|2|3> = {}
+      items.forEach(t => { map[t.schedule.id] = t.assignedWorker })
+      localStorage.setItem(ASSIGNED_WORKERS_KEY, JSON.stringify(map))
     } catch { /* ignore */ }
   }, [])
 
@@ -114,13 +164,27 @@ export default function StaffPage() {
     if (diff > 0) {
       // 왼쪽 스와이프 → 다음 탭 (전체→1→2→3)
       const next = TAB_ORDER[currentIndex + 1]
-      if (next !== undefined) setActiveTab(next)
+      if (next !== undefined) handleTabChange(next)
     } else {
       // 오른쪽 스와이프 → 이전 탭 (3→2→1→전체)
       const prev = TAB_ORDER[currentIndex - 1]
-      if (prev !== undefined) setActiveTab(prev)
+      if (prev !== undefined) handleTabChange(prev)
     }
     touchStartXRef.current = null
+  }
+
+  function handleTabChange(tab: ActiveTab) {
+    setActiveTab(tab)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('saechachorom_active_tab', String(tab))
+    }
+  }
+
+  function handleDateChange(newDate: string) {
+    setDate(newDate)
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('saechachorom_staff_date', newDate)
+    }
   }
 
   const detectSchemaSupport = useCallback(async () => {
@@ -213,7 +277,7 @@ export default function StaffPage() {
         washRecordId:     record?.id ?? null,
         workerName:       record?.completed_by ?? null,
         editingAdminNote: false,
-        assignedWorker:   1,  // 기본값 1번
+        assignedWorker:   1,  // 기본값 (나중에 복원됨)
       }
     })
 
@@ -232,9 +296,10 @@ export default function StaffPage() {
       return new Date(a.schedule.created_at).getTime() - new Date(b.schedule.created_at).getTime()
     })
 
-    setTasks(items)
+    const restoredItems = restoreAssignedWorkers(items)
+    setTasks(restoredItems)
     setLoading(false)
-  }, [date, detectSchemaSupport, schemaSupport, supabase])
+  }, [date, detectSchemaSupport, restoreAssignedWorkers, schemaSupport, supabase])
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
 
@@ -246,7 +311,9 @@ export default function StaffPage() {
   function assignWorker(idx: number, n: 1 | 2 | 3) {
     const task = tasks[idx]
     const next: 1 | 2 | 3 = (task.assignedWorker === n && n !== 1) ? 1 : n
-    updateTask(idx, { assignedWorker: next })
+    const newTasks = tasks.map((t, i) => i === idx ? { ...t, assignedWorker: next } : t)
+    setTasks(newTasks)
+    persistAssignedWorkers(newTasks)
   }
 
   async function toggleDone(idx: number, completedBy: 'worker' | 'admin' = 'worker') {
@@ -309,16 +376,25 @@ export default function StaffPage() {
     setSavingKey(null)
   }
 
-  // 작업보고 텍스트 생성 (카카오톡 형식)
-  const reportText = useMemo(() => {
-    if (!date || tasks.length === 0) return ''
+  // 작업보고 텍스트 생성 (카카오톡 형식) — 현재 탭에 맞는 차량만 포함
+  const buildReportText = useCallback((sourceTasks: TaskItem[], tab: ActiveTab) => {
+    if (!date || sourceTasks.length === 0) return ''
+
+    // 탭에 따라 필터링
+    const filteredTasks = tab === 'all'
+      ? sourceTasks
+      : sourceTasks.filter(t => t.assignedWorker === tab)
+
+    if (filteredTasks.length === 0) return ''
+
     const d = new Date(date + 'T00:00:00')
-    const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량`
+    const workerSuffix = tab !== 'all' ? ` (${workerNames[tab] || `${tab}번`})` : ''
+    const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량${workerSuffix}`
     const lines: string[] = [header]
     let interiorAddCount = 0
 
-    const regularTasks    = tasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type !== 'interior_only')
-    const interiorOnlyTasks = tasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only')
+    const regularTasks    = filteredTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type !== 'interior_only')
+    const interiorOnlyTasks = filteredTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only')
 
     // 아파트 이름에서 동/숫자 제거 (예: "서한이다음 621동" → "서한이다음")
     const baseApt = (apt: string) => apt.replace(/\s*\d+동?\s*$/, '').trim() || apt
@@ -364,7 +440,12 @@ export default function StaffPage() {
     if (interiorAddCount > 0) lines.push(`실내${interiorAddCount}`)
     if (interiorOnlyTasks.length > 0) lines.push(`실내만${interiorOnlyTasks.length}`)
     return lines.join('\n')
-  }, [date, tasks])
+  }, [date, workerNames])
+
+  const reportText = useMemo(
+    () => buildReportText(tasks, activeTab),
+    [buildReportText, tasks, activeTab]
+  )
 
   function copyReport() {
     if (!reportText) return
@@ -387,6 +468,14 @@ export default function StaffPage() {
     { key: 2,     label: workerLabel(2) },
     { key: 3,     label: workerLabel(3) },
   ]
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <div className="text-gray-400 text-sm">페이지 로딩 중...</div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -421,7 +510,7 @@ export default function StaffPage() {
               <input
                 type="date"
                 value={date || ''}
-                onChange={e => setDate(e.target.value)}
+                onChange={e => handleDateChange(e.target.value)}
                 className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700"
               />
               <p className="text-xs text-gray-500 mt-0.5">
@@ -436,7 +525,7 @@ export default function StaffPage() {
           {tabItems.map(({ key, label }) => (
             <button
               key={String(key)}
-              onClick={() => setActiveTab(key)}
+              onClick={() => handleTabChange(key)}
               className={`flex-1 py-2.5 text-sm font-semibold transition-colors border-b-2 ${
                 activeTab === key
                   ? 'border-blue-500 text-blue-600 bg-blue-50'
