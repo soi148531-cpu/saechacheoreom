@@ -61,7 +61,7 @@ export default function CompletionModal({
     if (!isOpen) return
     setError('')
     setWorkType(isInteriorOnly ? 'interior_only' : hasInterior ? 'both' : 'exterior')
-    setInteriorOnlyPrice(20000)
+    setInteriorOnlyPrice(isInteriorOnly ? (vehicle.unit_price || 20000) : 20000)
     setCustomLabel('실내청소')
     const fetchWorkers = async () => {
       try {

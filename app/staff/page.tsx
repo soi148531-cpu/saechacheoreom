@@ -392,16 +392,14 @@ export default function StaffPage() {
     const header = `${d.getMonth() + 1}.${d.getDate()} 작업차량${workerSuffix}`
     const lines: string[] = [header]
     let interiorAddCount = 0
-
-    const regularTasks    = filteredTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type !== 'interior_only')
-    const interiorOnlyTasks = filteredTasks.filter(t => (t.schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only')
+    let interiorOnlyCount = 0
 
     // 아파트 이름에서 동/숫자 제거 (예: "서한이다음 621동" → "서한이다음")
     const baseApt = (apt: string) => apt.replace(/\s*\d+동?\s*$/, '').trim() || apt
 
-    // 일반 외부세차 — 아파트 기본명으로 그룹핑
-    const grouped: { apt: string; items: typeof regularTasks }[] = []
-    regularTasks.forEach(t => {
+    // 아파트 기본명으로 그룹핑 (interior_only 포함 전체)
+    const grouped: { apt: string; items: typeof filteredTasks }[] = []
+    filteredTasks.forEach(t => {
       const apt = baseApt(t.schedule.vehicle.customer?.apartment ?? '기타')
       const group = grouped.find(g => g.apt === apt)
       if (group) group.items.push(t)
@@ -413,32 +411,30 @@ export default function StaffPage() {
       lines.push(`[${apt}]`)
       items.forEach(t => {
         const v = t.schedule.vehicle
-        lines.push(`${v.car_name} - ${v.plate_number}`)
-        if (t.schedule.has_interior) {
-          lines.push('내부')
-          interiorAddCount++
+        const isInteriorOnly = t.schedule.vehicle.repeat_mode === 'interior_only'
+        if (isInteriorOnly) {
+          // 실내만 차량: 메인 목록에 "내부만" 표시
+          lines.push(`${v.car_name} - ${v.plate_number} 내부만`)
+          interiorOnlyCount++
+        } else {
+          lines.push(`${v.car_name} - ${v.plate_number}`)
+          if (t.schedule.has_interior) {
+            lines.push('내부')
+            interiorAddCount++
+          }
         }
       })
     })
 
-    // 실내만 작업 — 별도 섹션
-    if (interiorOnlyTasks.length > 0) {
-      lines.push('')
-      lines.push('[실내작업]')
-      interiorOnlyTasks.forEach(t => {
-        const v = t.schedule.vehicle
-        const unit = v.customer?.unit_number ? ` (${v.customer.unit_number})` : ''
-        lines.push(`${v.car_name} - ${v.plate_number}${unit}`)
-      })
-    }
-
-    const outdoor = regularTasks.length
-    const total = outdoor + interiorAddCount + interiorOnlyTasks.length
+    const outdoor = filteredTasks.filter(t =>
+      t.schedule.vehicle.repeat_mode !== 'interior_only'
+    ).length
+    const totalInterior = interiorAddCount + interiorOnlyCount
+    const total = outdoor + totalInterior
     lines.push('')
     lines.push(`${total}대`)
     lines.push(`실외${outdoor}`)
-    if (interiorAddCount > 0) lines.push(`실내${interiorAddCount}`)
-    if (interiorOnlyTasks.length > 0) lines.push(`실내만${interiorOnlyTasks.length}`)
+    if (totalInterior > 0) lines.push(`실내${totalInterior}`)
     return lines.join('\n')
   }, [date, workerNames])
 
@@ -634,7 +630,7 @@ export default function StaffPage() {
           }}
           scheduled_date={tasks[selectedTaskIdx].schedule.scheduled_date}
           schedule_id={tasks[selectedTaskIdx].schedule.id}
-          isInteriorOnly={(tasks[selectedTaskIdx].schedule as unknown as { schedule_type?: string }).schedule_type === 'interior_only'}
+          isInteriorOnly={tasks[selectedTaskIdx].schedule.vehicle.repeat_mode === 'interior_only'}
           hasInterior={!!tasks[selectedTaskIdx].schedule.has_interior}
           onSuccess={() => {
             setCompletionModalOpen(false)
@@ -755,7 +751,12 @@ const TaskCard = memo(function TaskCard({
             {task.schedule.is_overcount && (
               <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">초과</span>
             )}
-            {task.schedule.has_interior && (
+            {v.repeat_mode === 'interior_only' && (
+              <span className="flex items-center gap-0.5 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold">
+                🛋️실내만
+              </span>
+            )}
+            {task.schedule.has_interior && v.repeat_mode !== 'interior_only' && (
               <span className="flex items-center gap-0.5 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">
                 <Sofa size={10} />실내有
               </span>

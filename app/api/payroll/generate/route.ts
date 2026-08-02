@@ -111,12 +111,17 @@ export async function POST(request: NextRequest) {
           workerCount[record.completed_by] = { total: 0, outdoor: 0, indoor: 0, worker_id: record.worker_id }
         }
         
-        // 세차 1건 = 실외 1건 (항상)
         workerCount[record.completed_by].total += 1
-        workerCount[record.completed_by].outdoor += 1
-        // 실내청소가 포함된 경우 실내도 추가
-        if (record.service_type && record.service_type.includes('interior')) {
+
+        if (record.service_type === 'interior_only') {
+          // 실내만 차량: 실외 없이 실내만 카운트
           workerCount[record.completed_by].indoor += 1
+        } else {
+          // 일반/실내포함 세차: 실외 1건 기본 + 실내 포함 시 실내도 추가
+          workerCount[record.completed_by].outdoor += 1
+          if (record.service_type && record.service_type.includes('interior')) {
+            workerCount[record.completed_by].indoor += 1
+          }
         }
       }
     })
