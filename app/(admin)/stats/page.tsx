@@ -143,7 +143,7 @@ export default function StatsPage() {
         .lte('wash_date', `${year}-12-31`)
         .eq('is_completed', true),
       supabase.from('billings')
-        .select('vehicle_id, paid_amount, year_month, total_amount, payment_status')
+        .select('vehicle_id, paid_amount, year_month, total_amount, payment_status, items:billing_items(amount)')
         .gte('year_month', `${year}-01`)
         .lte('year_month', `${year}-12`),
     ])
@@ -260,8 +260,12 @@ export default function StatsPage() {
         return true
       })
       .reduce((s, b) => {
-        // 청구발송과 동일한 기준: 완납=실시간 세차합산, 부분납=paid_amount, 미입금=0
-        if (b.payment_status === 'paid') return s + (vehicleWashSum.get(b.vehicle_id) ?? b.total_amount ?? 0)
+        // 청구발송과 동일: 완납=세차합산+추가항목, 부분납=paid_amount, 미입금=0
+        if (b.payment_status === 'paid') {
+          const washSum = vehicleWashSum.get(b.vehicle_id) ?? 0
+          const extraSum = (b.items ?? []).reduce((acc, i) => acc + (i.amount ?? 0), 0)
+          return s + washSum + extraSum
+        }
         if (b.payment_status === 'partial') return s + (b.paid_amount ?? 0)
         return s
       }, 0)
