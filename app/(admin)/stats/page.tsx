@@ -243,7 +243,7 @@ export default function StatsPage() {
     const seen = new Set<string>()
     return billings
       .filter(b => {
-        const vid = (b as any).vehicle_id
+        const vid = b.vehicle_id
         if (b.year_month !== monthYm) return false
         if (!validVehicleIds.has(vid)) return false
         if (!monthWashVehicleIds.has(vid)) return false
@@ -252,10 +252,9 @@ export default function StatsPage() {
         return true
       })
       .reduce((s, b) => {
-        const status = (b as any).payment_status
         // 청구발송과 동일한 기준: 완납=total_amount, 부분납=paid_amount, 미입금=0
-        if (status === 'paid') return s + ((b as any).total_amount ?? 0)
-        if (status === 'partial') return s + (b.paid_amount ?? 0)
+        if (b.payment_status === 'paid') return s + (b.total_amount ?? 0)
+        if (b.payment_status === 'partial') return s + (b.paid_amount ?? 0)
         return s
       }, 0)
   }, [billings, monthYm, vehicles, washRecords, year, month])
