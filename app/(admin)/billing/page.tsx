@@ -73,14 +73,14 @@ function calculateBillingStats(customers: CustomerBilling[]): BillingStats {
       totalPaidAmount += vb.paidAmount
       totalRecords += vb.records.length
 
+      unpaidAmount += (vb.totalAmount - vb.paidAmount)
+
       if (vb.paymentStatus === 'paid') {
         paidCount++
       } else if (vb.paymentStatus === 'partial') {
         partialCount++
-        unpaidAmount += vb.totalAmount - vb.paidAmount
       } else {
         unpaidCount++
-        unpaidAmount += vb.totalAmount
       }
     })
   })
