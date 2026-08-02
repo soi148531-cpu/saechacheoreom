@@ -113,15 +113,23 @@ export default function CustomersPage() {
     setShowNewList(false); setShowExitList(false)
   }
 
-  // 월 예상 매출 (정기 active 차량 외부 + 실내)
-  const monthlyRevenue = allVehicles
-    .filter(v => v.status === 'active')
-    .reduce((sum, v) => {
-      const count = MONTHLY_COUNT_NUM[v.monthly_count] ?? 0
-      const exteriorRevenue = (v.unit_price ?? 0) * count
-      const interiorRevenue = (v.interior_count ?? 0) * 10000
-      return sum + exteriorRevenue + interiorRevenue
-    }, 0)
+  // viewMonth 기준 정기 차량 수 & 예상 매출 (통계 페이지와 동일한 기준)
+  const viewFirst = `${viewMonth}-01`
+  const viewLastDay = new Date(vy, vm, 0).getDate()
+  const viewLast = `${viewMonth}-${String(viewLastDay).padStart(2, '0')}`
+
+  const activeForViewMonth = allVehicles.filter(v => {
+    if (v.start_date > viewLast) return false
+    if (v.end_date && v.end_date < viewFirst) return false
+    return v.status === 'active'
+  })
+
+  const monthlyRevenue = activeForViewMonth.reduce((sum, v) => {
+    const count = MONTHLY_COUNT_NUM[v.monthly_count] ?? 0
+    const exteriorRevenue = (v.unit_price ?? 0) * count
+    const interiorRevenue = (v.interior_count ?? 0) * 10000
+    return sum + exteriorRevenue + interiorRevenue
+  }, 0)
 
   return (
     <div className="p-4 max-w-2xl mx-auto">
@@ -231,12 +239,12 @@ export default function CustomersPage() {
         <div className="flex gap-3 text-sm">
           <span className="text-gray-500">고객 <span className="font-bold text-gray-800">{customers.length}명</span></span>
           <span className="text-gray-300">|</span>
-          <span className="text-gray-500">정기 <span className="font-bold text-blue-600">{counts.active}대</span></span>
+          <span className="text-gray-500">정기 <span className="font-bold text-blue-600">{activeForViewMonth.length}대</span></span>
           <span className="text-gray-300">|</span>
           <span className="text-gray-500">정지 <span className="font-bold text-gray-600">{counts.paused}대</span></span>
         </div>
         <div className="text-right">
-          <p className="text-xs text-gray-400">월 예상 매출</p>
+          <p className="text-xs text-gray-400">{formatYM(viewMonth)} 예상 매출</p>
           <p className="text-sm font-bold text-green-600">{formatPrice(monthlyRevenue)}원</p>
         </div>
       </div>
