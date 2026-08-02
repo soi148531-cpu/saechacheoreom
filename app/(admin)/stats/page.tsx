@@ -240,6 +240,14 @@ export default function StatsPage() {
         .filter(r => r.wash_date.startsWith(ymPrefix(year, month)))
         .map(r => r.vehicle_id)
     )
+    // 차량별 이달 세차 금액 실시간 합산 (billing page와 동일한 기준)
+    const vehicleWashSum = new Map<string, number>()
+    washRecords
+      .filter(r => r.wash_date.startsWith(ymPrefix(year, month)))
+      .forEach(r => {
+        vehicleWashSum.set(r.vehicle_id, (vehicleWashSum.get(r.vehicle_id) ?? 0) + r.price)
+      })
+
     const seen = new Set<string>()
     return billings
       .filter(b => {
@@ -252,8 +260,8 @@ export default function StatsPage() {
         return true
       })
       .reduce((s, b) => {
-        // 청구발송과 동일한 기준: 완납=total_amount, 부분납=paid_amount, 미입금=0
-        if (b.payment_status === 'paid') return s + (b.total_amount ?? 0)
+        // 청구발송과 동일한 기준: 완납=실시간 세차합산, 부분납=paid_amount, 미입금=0
+        if (b.payment_status === 'paid') return s + (vehicleWashSum.get(b.vehicle_id) ?? b.total_amount ?? 0)
         if (b.payment_status === 'partial') return s + (b.paid_amount ?? 0)
         return s
       }, 0)
