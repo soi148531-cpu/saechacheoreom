@@ -70,17 +70,21 @@ function calculateBillingStats(customers: CustomerBilling[]): BillingStats {
   customers.forEach(cb => {
     cb.vehicles.forEach(vb => {
       totalBillingAmount += vb.totalAmount
-      totalPaidAmount += vb.paidAmount
       totalRecords += vb.records.length
 
-      unpaidAmount += (vb.totalAmount - vb.paidAmount)
-
       if (vb.paymentStatus === 'paid') {
+        // 완납: totalAmount 전액을 입금된 것으로 처리 (완납 후 추가항목이 생겨도 완납 기준)
+        totalPaidAmount += vb.totalAmount
         paidCount++
       } else if (vb.paymentStatus === 'partial') {
+        // 부분납: 실제 입금액만 카운트, 나머지는 미입금
+        totalPaidAmount += vb.paidAmount
         partialCount++
+        unpaidAmount += vb.totalAmount - vb.paidAmount
       } else {
+        // 미입금: 전액 미수
         unpaidCount++
+        unpaidAmount += vb.totalAmount
       }
     })
   })
