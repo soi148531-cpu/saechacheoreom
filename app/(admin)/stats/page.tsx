@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'
@@ -143,7 +143,7 @@ export default function StatsPage() {
         .lte('wash_date', `${year}-12-31`)
         .eq('is_completed', true),
       supabase.from('billings')
-        .select('vehicle_id, paid_amount, year_month, total_amount')
+        .select('vehicle_id, paid_amount, year_month, total_amount, payment_status')
         .gte('year_month', `${year}-01`)
         .lte('year_month', `${year}-12`),
     ])
@@ -251,7 +251,13 @@ export default function StatsPage() {
         seen.add(vid)
         return true
       })
-      .reduce((s, b) => s + (b.paid_amount ?? 0), 0)
+      .reduce((s, b) => {
+        const status = (b as any).payment_status
+        // 청구발송과 동일한 기준: 완납=total_amount, 부분납=paid_amount, 미입금=0
+        if (status === 'paid') return s + ((b as any).total_amount ?? 0)
+        if (status === 'partial') return s + (b.paid_amount ?? 0)
+        return s
+      }, 0)
   }, [billings, monthYm, vehicles, washRecords, year, month])
 
   const periodLabel = view === 'monthly' ? `${year}년` : `${year}년 ${MONTHS_KR[month]}`
