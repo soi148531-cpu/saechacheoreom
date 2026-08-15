@@ -133,26 +133,44 @@ export default function StatsPage() {
   const [loading,     setLoading]     = useState(true)
   const { priceTable } = usePricing()
 
+  // Supabase max_rows=1000 서버 제한을 우회: 1000개씩 페이지네이션으로 전체 조회
+  async function fetchAllWashRecords(yr: number): Promise<WashRecord[]> {
+    const all: WashRecord[] = []
+    const PAGE = 1000
+    let offset = 0
+    while (true) {
+      const { data } = await supabase
+        .from('wash_records')
+        .select('*')
+        .gte('wash_date', `${yr}-01-01`)
+        .lte('wash_date', `${yr}-12-31`)
+        .eq('is_completed', true)
+        .range(offset, offset + PAGE - 1)
+        .order('wash_date', { ascending: true })
+      if (!data || data.length === 0) break
+      all.push(...(data as WashRecord[]))
+      if (data.length < PAGE) break
+      offset += PAGE
+    }
+    return all
+  }
+
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [vRes, rRes, bRes] = await Promise.all([
-      supabase.from('vehicles').select('*').limit(2000),
-      supabase.from('wash_records')
-        .select('*')
-        .gte('wash_date', `${year}-01-01`)
-        .lte('wash_date', `${year}-12-31`)
-        .eq('is_completed', true)
-        .limit(5000),  // Supabase 기본 1000행 제한 우회
+    const [vRes, bRes, allRecords] = await Promise.all([
+      supabase.from('vehicles').select('*').range(0, 1999),
       supabase.from('billings')
         .select('vehicle_id, paid_amount, year_month, total_amount, payment_status, items:billing_items(amount)')
         .gte('year_month', `${year}-01`)
         .lte('year_month', `${year}-12`)
-        .limit(5000),
+        .range(0, 1999),
+      fetchAllWashRecords(year),
     ])
     if (vRes.data)  setVehicles(vRes.data as Vehicle[])
-    if (rRes.data)  setWashRecords(rRes.data as WashRecord[])
     if (bRes.data)  setBillings(bRes.data as Billing[])
+    setWashRecords(allRecords)
     setLoading(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, year])
 
   const fetchSchedules = useCallback(async () => {
