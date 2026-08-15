@@ -168,6 +168,17 @@ export default function StatsPage() {
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { fetchSchedules() }, [fetchSchedules])
 
+  // 다른 페이지(작업 현황 등)에서 돌아올 때 최신 데이터 자동 새로고침
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [fetchData])
+
   function prevMonth() {
     if (month === 0) { setYear(y => y - 1); setMonth(11) }
     else setMonth(m => m - 1)

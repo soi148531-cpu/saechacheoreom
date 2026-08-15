@@ -44,7 +44,7 @@ const ASSIGNED_WORKERS_KEY = 'saechachorom_assigned_workers'
 export default function StaffPage() {
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
-  const { priceTable } = usePricing()
+  const { priceTable, getUnitPrice } = usePricing()
 
   const [tasks,        setTasks]        = useState<TaskItem[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -334,11 +334,13 @@ export default function StaffPage() {
         await db().from('schedules').update({ admin_memo: task.adminNote.trim() || null }).eq('id', task.schedule.id)
       }
       const hasInterior = task.schedule.has_interior && task.interiorDone
+      // unit_price가 null인 경우 priceTable에서 계산한 가격으로 fallback
+      const basePrice = v.unit_price ?? getUnitPrice(v.car_grade, v.monthly_count)
       const payload: Record<string, unknown> = {
         vehicle_id:  v.id,
         schedule_id: task.schedule.id,
         wash_date:   date,
-        price:       (v.unit_price ?? 0) + (hasInterior ? priceTable.interior : 0),
+        price:       basePrice + (hasInterior ? priceTable.interior : 0),
         is_completed: true,
         memo:         task.memo.trim() || null,
       }
