@@ -136,16 +136,18 @@ export default function StatsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     const [vRes, rRes, bRes] = await Promise.all([
-      supabase.from('vehicles').select('*'),
+      supabase.from('vehicles').select('*').limit(2000),
       supabase.from('wash_records')
         .select('*')
         .gte('wash_date', `${year}-01-01`)
         .lte('wash_date', `${year}-12-31`)
-        .eq('is_completed', true),
+        .eq('is_completed', true)
+        .limit(5000),  // Supabase 기본 1000행 제한 우회
       supabase.from('billings')
         .select('vehicle_id, paid_amount, year_month, total_amount, payment_status, items:billing_items(amount)')
         .gte('year_month', `${year}-01`)
-        .lte('year_month', `${year}-12`),
+        .lte('year_month', `${year}-12`)
+        .limit(5000),
     ])
     if (vRes.data)  setVehicles(vRes.data as Vehicle[])
     if (rRes.data)  setWashRecords(rRes.data as WashRecord[])
